@@ -1,0 +1,9 @@
+source.cjs
+.env
+.env.*
+backups/
+dist/
+node_modules/
+*.log
+*.zip
+runtime/

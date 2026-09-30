@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>魔方成绩 · 腾讯文档只读统计</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="core.js" defer></script>
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="./index.html" aria-label="魔方成绩首页"><span class="cube-mark" aria-hidden="true">▦</span><span>魔方成绩<small>训练成绩 · 只读快照</small></span></a>
+    <div class="top-actions"><button id="refresh-data" type="button">刷新快照</button><button id="export-csv" type="button" disabled>导出 CSV</button></div>
+  </header>
+  <div class="workspace">
+    <aside class="sidebar">
+      <div class="section-heading"><span>训练人员</span><span id="people-count" class="badge">0</span></div>
+      <nav id="people-list" aria-label="训练人员列表"></nav>
+      <div class="sidebar-foot"><strong>腾讯文档是唯一数据源</strong><p id="source-info" class="muted">等待读取源表信息</p><p>源表由 Actions 每 30 分钟读取。本站只展示公开统计快照，不提供文档地址。</p></div>
+    </aside>
+    <main id="stats-main" tabindex="-1">
+      <section class="sync-card card" aria-label="腾讯文档读取状态">
+        <div class="sync-heading"><strong id="sync-status" role="status" aria-live="polite">正在读取腾讯文档…</strong><label class="auto-sync-label"><input id="auto-sync" type="checkbox" checked>每 60 秒检查新快照</label></div>
+        <p id="last-success" class="muted">成绩更新时间：尚未加载快照</p>
+      </section>
+      <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
+      <section id="source-warnings" class="source-warnings" aria-label="腾讯源表读取警告" hidden></section>
+      <div class="page-heading">
+        <div id="person-heading" class="person-heading" hidden><div class="person-identity"><span id="active-avatar" class="avatar">人</span><div><h1 id="person-title"></h1><p id="person-subtitle" class="muted"></p></div></div></div>
+        <h1 id="view-title">训练统计</h1>
+        <div class="tabs" role="tablist" aria-label="统计视图"><button id="personal-tab" role="tab" aria-selected="true" aria-controls="personal-panel" type="button">个人分析</button><button id="comparison-tab" role="tab" aria-selected="false" aria-controls="comparison-panel" type="button">多人对比</button></div>
+        <label class="range-label">统计范围<select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option></select></label>
+      </div>
+      <section id="welcome" class="welcome card"><span class="welcome-symbol" aria-hidden="true">▦</span><h2 id="welcome-title">正在读取腾讯文档</h2><p id="welcome-text">成功读取后，自动显示源表人员与成绩。没有示例或本地备用数据。</p></section>
+      <section id="personal-panel" role="tabpanel" aria-labelledby="personal-tab" hidden>
+        <div class="metrics">
+          <article class="card metric"><span>最佳 ao5</span><strong id="metric-best">—</strong><small>当前范围的个人最佳</small></article>
+          <article class="card metric"><span>平均 ao5</span><strong id="metric-mean">—</strong><small>全部有效组的平均用时</small></article>
+          <article class="card metric"><span>Sub7 率</span><strong id="metric-sub7">—</strong><small id="sub7-caption">ao5 &lt; 7 秒 / 总组数，DNF 未达标</small></article>
+          <article class="card metric"><span>标准差</span><strong id="metric-std">—</strong><small>越小，成绩越稳定</small></article>
+        </div>
+        <div class="overview-grid">
+          <section class="card chart-card"><div class="card-heading"><h3>ao5 变化趋势</h3><span class="legend"><i></i>每组 ao5 · 红色 × 为 DNF</span></div><div id="chart" class="chart"></div><details class="chart-help"><summary>图表说明</summary><div id="chart-caption" class="chart-caption"></div></details></section>
+          <section class="card analysis-card"><div class="card-heading"><h3>训练分析</h3></div><div id="analysis" class="analysis"></div></section>
+        </div>
+        <details class="card history-card"><summary class="card-heading"><h3>成绩记录 <span id="record-count" class="badge">0</span></h3><span class="disclosure-label">展开 / 收起明细</span></summary><p class="history-help muted">按训练日期、源表行号倒序；原始精度和来源位置保留。</p><div class="table-wrap"><table><thead><tr><th>训练日期</th><th>ao5（源表精度）</th><th>备注</th><th>来源单元格</th></tr></thead><tbody id="records-body"></tbody></table></div><div id="pagination" class="pagination" hidden><button id="prev-page" type="button">上一页</button><span id="page-info"></span><button id="next-page" type="button">下一页</button></div></details>
+        <details class="method-help"><summary>统计口径与注意事项</summary><p class="footnote">Sub7 率 = ao5 严格小于 7 秒的组数 / 当前范围总组数；7.00 秒不达标，DNF 计入总组数但不达标，按源表原始精度判断。每条是一组已计算的 ao5。DNF 不参与均值、中位数和标准差；异常大值仍计入统计。近期变化只反映最近 10 条有效记录，不代表长期结论。标准差 ÷ 均值为波动系数，样本少时谨慎解读。未知日期不补成今天，也不计入最近天数筛选。</p></details>
+      </section>
+      <section id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab" hidden><section class="card"><div class="card-heading"><h3>多人训练对比</h3><p>同一统计范围 · 按有效 ao5 均值排序</p></div><div class="table-wrap"><table><thead><tr><th>人员</th><th>总组数 / DNF</th><th>最佳 ao5</th><th>平均 ao5</th><th>标准差</th><th>Sub7 率</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section><p class="footnote">样本数量不同，请谨慎比较。无有效成绩的人员排在最后。</p></section>
+      <footer>公开训练统计 <span>每条记录是一组 ao5 · 修改数据请回源表</span></footer>
+    </main>
+  </div>
+  <noscript><p class="notice">需要 JavaScript 和本地读取服务，才能读取与分析腾讯文档。</p></noscript>
+</body>
+</html>
+
