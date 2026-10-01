@@ -1,5 +1,5 @@
 'use strict';
-const fs=require('node:fs');const path=require('node:path');
+const fs=require('node:fs');const path=require('node:path');const {createHash}=require('node:crypto');
 const {TencentReader,assertSource}=require('./tencent-reader.cjs');const {convertSnapshot}=require('./tencent-sheet.cjs');
 function assertSafe(text,source){
   const url=new URL(source.url);const forbidden=[source.url,source.sheetId,url.pathname.split('/').pop(),...Array.from(url.searchParams.values()).filter(value=>value.length>=8)].filter(Boolean);
@@ -30,6 +30,16 @@ function publicPage(text,source){
   assertPublicPage(html,source);
   return html;
 }
+function versionAssets(html,assets){
+  for(const [name,attribute] of [['styles.css','href'],['core.js','src'],['app.js','src']]){
+    if(typeof assets[name]!=='string')throw new Error('Publication blocked: missing page asset.');
+    const reference=`${attribute}="${name}"`;
+    if(html.split(reference).length!==2)throw new Error('Publication blocked: invalid asset reference.');
+    const version=createHash('sha256').update(assets[name]).digest('hex').slice(0,12);
+    html=html.replace(reference,`${attribute}="${name}?v=${version}"`);
+  }
+  return html;
+}
 function publicPayload(data,source,at=new Date().toISOString()){
   if(!data?.people?.length||!data?.records?.length)throw new Error('Publication blocked: empty snapshot.');
   const ids=new Map(data.people.map((p,i)=>[p.id,'p'+(i+1)]));
@@ -50,15 +60,14 @@ async function main(){
   try{
     const raw=await reader.read(source);const payload=publicPayload(convertSnapshot(raw,source),source);
     const out=path.resolve(process.env.PUBLIC_OUTPUT||path.join(__dirname,'dist'));fs.mkdirSync(out,{recursive:true});
-    for(const name of ['index.html','styles.css','core.js','app.js']){
-      const text=fs.readFileSync(path.join(__dirname,name),'utf8');
-      const output=name==='index.html'?publicPage(text,source):text;
-      if(name!=='index.html')assertSafe(output,source);
-      fs.writeFileSync(path.join(out,name),output);
-    }
+    const assets=Object.fromEntries(['styles.css','core.js','app.js'].map(name=>[name,fs.readFileSync(path.join(__dirname,name),'utf8')]));
+    const html=versionAssets(publicPage(fs.readFileSync(path.join(__dirname,'index.html'),'utf8'),source),assets);
+    assertPublicPage(html,source);
+    for(const [name,text] of Object.entries(assets)){assertSafe(text,source);fs.writeFileSync(path.join(out,name),text);}
+    fs.writeFileSync(path.join(out,'index.html'),html);
     fs.writeFileSync(path.join(out,'data.json'),JSON.stringify(payload));fs.writeFileSync(path.join(out,'.nojekyll'),'');
     console.log(`Published safe snapshot: ${payload.data.people.length} people, ${payload.data.records.length} records, ${payload.lastSuccessAt}`);
   }finally{await reader.close();}
 }
-module.exports={publicPayload,assertSafe,documentUrl,publicPage,assertPublicPage};
+module.exports={publicPayload,assertSafe,documentUrl,publicPage,assertPublicPage,versionAssets};
 if(require.main===module)main().catch(()=>{console.error('Publication failed; no deployment will run. Check source permission, network, or Secrets configuration. Private source details are not logged.');process.exitCode=1;});

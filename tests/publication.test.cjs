@@ -1,6 +1,6 @@
 'use strict';
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');
-const {publicPayload,assertSafe,documentUrl,publicPage,assertPublicPage}=require('../publish.cjs');
+const {publicPayload,assertSafe,documentUrl,publicPage,assertPublicPage,versionAssets}=require('../publish.cjs');
 const secret={url:'https://docs.qq.com/sheet/PRIVATE_DOCUMENT_123?tab=PRIVATE_TAB&rtkey=PRIVATE_KEY_123',sheetId:'PRIVATE_TAB'};
 const raw={version:1,people:[{id:'PRIVATE_TAB_c2',name:'cy',sourceColumn:'B'}],records:[{id:'PRIVATE_TAB_r2_c2',personId:'PRIVATE_TAB_c2',score:699.9,date:'2026-09-30',at:'2026-09-29T16:00:00Z',sourceRow:2,sourceColumn:'B',sourceCell:'B2',sourceValue:6.999,sourceText:'6.999',note:''},{id:'PRIVATE_TAB_r3_c2',personId:'PRIVATE_TAB_c2',score:null,date:'2026-09-30',sourceRow:3,sourceColumn:'B',sourceCell:'B3',sourceValue:'DNF',sourceText:'DNF'}],warnings:[],source:secret};
 test('publication whitelists fields, removes private source and IDs, retains precision and DNF',()=>{const p=publicPayload(raw,secret,'2026-09-30T12:00:00Z');assertSafe(JSON.stringify(p),secret);assert.equal(p.data.records.length,2);assert.equal(p.data.records[0].score,699.9);assert.equal(p.data.records[0].sourceText,'6.999');assert.equal(p.data.records[1].score,null);assert.equal(p.data.records[0].personId,p.data.people[0].id);assert.equal(p.data.source.url,undefined);assert.equal(p.lastSuccessAt,'2026-09-30T12:00:00Z');assert.equal(p.data.records[0].id,'r1');});
@@ -25,6 +25,17 @@ test('the public-link exception applies only to the approved button, never score
  assert.throws(()=>publicPage(template.replace('id="source-link"','id="removed-link"'),secret));
  assert.throws(()=>publicPage(template+template,secret));
  const poisoned=structuredClone(raw);poisoned.people[0].name=documentUrl(secret);assert.throws(()=>publicPayload(poisoned,secret));
+});
+test('all page assets carry content versions so old cached calendar scripts cannot mix with a new page',()=>{
+ const root=path.join(__dirname,'..'),template=fs.readFileSync(path.join(root,'index.html'),'utf8');
+ const assets=Object.fromEntries(['styles.css','core.js','app.js'].map(name=>[name,fs.readFileSync(path.join(root,name),'utf8')]));
+ const html=versionAssets(publicPage(template,secret),assets);assertPublicPage(html,secret);
+ const hashes={};for(const name of Object.keys(assets)){const reference=html.match(new RegExp(name.replace('.','\\.')+'\\?v=([a-f0-9]{12})'));assert.ok(reference,'every asset has an explicit version');hashes[name]=reference[1];}
+ assert.equal(html,versionAssets(publicPage(template,secret),assets),'versions are stable for identical files');
+ const changed=versionAssets(publicPage(template,secret),{...assets,'app.js':assets['app.js']+'\n// changed calendar behavior'});
+ assert.ok(!changed.includes('app.js?v='+hashes['app.js']),'new JS content gets a new cache key');
+ assert.ok(changed.includes('core.js?v='+hashes['core.js']));assert.ok(changed.includes('styles.css?v='+hashes['styles.css']));
+ assert.throws(()=>versionAssets(template,{}));assert.throws(()=>versionAssets(template.replace('src="app.js"','src="missing.js"'),assets));
 });
 test('invalid source URLs cannot become a public button destination',()=>{
  for(const url of ['http://docs.qq.com/sheet/PRIVATE_DOCUMENT_123','https://evil.example/sheet/PRIVATE_DOCUMENT_123','https://docs.qq.com:8443/sheet/PRIVATE_DOCUMENT_123','https://user:pass@docs.qq.com/sheet/PRIVATE_DOCUMENT_123','https://docs.qq.com/other/PRIVATE_DOCUMENT_123','https://docs.qq.com/sheet/PRIVATE_DOCUMENT_123?tab=wrong'])assert.throws(()=>documentUrl({...secret,url}));
