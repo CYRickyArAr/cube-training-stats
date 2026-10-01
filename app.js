@@ -34,8 +34,8 @@
     // core's chronological sort cannot order missing dates / same-day source rows.
     const values = [...records].sort(compareRecords).filter(record => record.score !== null).map(record => record.score);
     const mean = list => list.length ? list.reduce((sum,value) => sum+value,0)/list.length : null;
-    stats.recentMean = mean(values.slice(-5));
-    stats.previousMean = values.length >= 10 ? mean(values.slice(-10,-5)) : null;
+    stats.recentMean = mean(values.slice(-20));
+    stats.previousMean = values.length >= 40 ? mean(values.slice(-40,-20)) : null;
     stats.improvement = stats.previousMean === null ? null : (stats.previousMean-stats.recentMean)/stats.previousMean*100;
     return stats;
   }
@@ -106,11 +106,11 @@
     $('#chart').innerHTML = svg+'</svg>';
   }
   function renderAnalysis(stats) {
-    let trendTitle = '再积累一些数据', trendText = '至少 10 组有效 ao5 才能比较近期变化。', trendClass = '';
+    let trendTitle = '再积累一些数据', trendText = '至少 40 组有效 ao5 才能比较近期变化。', trendClass = '';
     if (stats.improvement !== null) {
       const amount = Math.abs(stats.improvement), equal = amount < .05;
       trendTitle = equal ? '近期水平基本持平' : `近期${stats.improvement > 0 ? '提升' : '变慢'} ${amount.toFixed(1)}%`;
-      trendText = `此前 5 组 ${time(stats.previousMean)} → 最近 5 组 ${time(stats.recentMean)}`;
+      trendText = `此前 20 组 ${time(stats.previousMean)} → 最近 20 组 ${time(stats.recentMean)}`;
       trendClass = equal ? '' : stats.improvement > 0 ? 'good' : 'bad';
     }
     const stabilityTitle = stats.valid >= 2 ? `波动系数 ${percentage(stats.cv)}` : '暂不能判断稳定性';

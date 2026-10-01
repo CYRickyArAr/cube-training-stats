@@ -27,8 +27,8 @@
     const sorted = [...values].sort((a,b) => a-b);
     const mean = avg(values);
     const n = values.length;
-    const recentMean = avg(values.slice(-5));
-    const previousMean = n >= 10 ? avg(values.slice(-10,-5)) : null;
+    const recentMean = avg(values.slice(-20));
+    const previousMean = n >= 40 ? avg(values.slice(-40,-20)) : null;
     const sub7Count = values.filter(value => value < 700).length;
     return {
       sub7Count, sub7Rate:records.length ? sub7Count / records.length * 100 : null,
