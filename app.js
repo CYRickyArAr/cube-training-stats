@@ -146,7 +146,7 @@
   function renderComparison() {
     const rows = state.people.map(person => ({person,stats:analyze(recordsFor(person.id))}));
     rows.sort((a,b) => (a.stats.mean ?? Infinity)-(b.stats.mean ?? Infinity) || a.person.name.localeCompare(b.person.name,'zh-CN'));
-    $('#comparison-body').innerHTML = rows.length ? rows.map(({person,stats}) => `<tr><td><div class="comparison-name"><button type="button" data-person="${escape(person.id)}">${escape(person.name)}</button></div></td><td>${stats.total} / ${stats.dnf}</td><td class="score">${time(stats.best)}</td><td class="score">${time(stats.mean)}</td><td class="score">${stats.valid >= 2 ? time(stats.std) : '—'}</td><td class="score">${percentage(stats.sub7Rate)}</td></tr>`).join('') : '<tr><td colspan="6" class="empty-row">尚无腾讯源表数据可供对比。</td></tr>';
+    $('#comparison-body').innerHTML = rows.length ? rows.map(({person,stats}) => `<tr><td><div class="comparison-name"><button type="button" data-person="${escape(person.id)}">${escape(person.name)}</button></div></td><td>${stats.total} / ${stats.dnf}</td><td class="score">${time(stats.best)}</td><td class="score">${time(stats.mean)}</td><td class="score">${percentage(stats.sub7Rate)}</td><td class="score">${stats.valid >= 2 ? time(stats.std) : '—'}</td></tr>`).join('') : '<tr><td colspan="6" class="empty-row">尚无腾讯源表数据可供对比。</td></tr>';
   }
   function render() {
     renderDateRange();
