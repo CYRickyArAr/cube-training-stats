@@ -12,13 +12,13 @@
 <body>
   <header class="topbar">
     <a class="brand" href="./index.html" aria-label="魔方成绩首页"><span class="cube-mark" aria-hidden="true">▦</span><span>魔方成绩<small>训练成绩 · 只读快照</small></span></a>
-    <div class="top-actions"><button id="refresh-data" type="button">刷新快照</button><button id="export-csv" type="button" disabled>导出 CSV</button></div>
+    <div class="top-actions"><a id="source-link" class="button-link" target="_blank" rel="noopener noreferrer" aria-disabled="true">打开腾讯文档</a><button id="refresh-data" type="button">刷新快照</button><button id="export-csv" type="button" disabled>导出 CSV</button></div>
   </header>
   <div class="workspace">
     <aside class="sidebar">
       <div class="section-heading"><span>训练人员</span><span id="people-count" class="badge">0</span></div>
       <nav id="people-list" aria-label="训练人员列表"></nav>
-      <div class="sidebar-foot"><strong>腾讯文档是唯一数据源</strong><p id="source-info" class="muted">等待读取源表信息</p><p>源表由 Actions 每 30 分钟读取。本站只展示公开统计快照，不提供文档地址。</p></div>
+      <div class="sidebar-foot"><strong>腾讯文档是唯一数据源</strong><p id="source-info" class="muted">等待读取源表信息</p><p>源表由 Actions 每 30 分钟读取。本站只展示公开统计快照；可通过顶部按钮打开腾讯源表，访问权限由腾讯文档控制。</p></div>
     </aside>
     <main id="stats-main" tabindex="-1">
       <section class="sync-card card" aria-label="腾讯文档读取状态">
@@ -31,7 +31,7 @@
         <div id="person-heading" class="person-heading" hidden><div class="person-identity"><span id="active-avatar" class="avatar">人</span><div><h1 id="person-title"></h1><p id="person-subtitle" class="muted"></p></div></div></div>
         <h1 id="view-title">训练统计</h1>
         <div class="tabs" role="tablist" aria-label="统计视图"><button id="personal-tab" role="tab" aria-selected="true" aria-controls="personal-panel" type="button">个人分析</button><button id="comparison-tab" role="tab" aria-selected="false" aria-controls="comparison-panel" type="button">多人对比</button></div>
-        <div class="range-label"><label for="range">统计范围</label><div class="range-controls"><select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="day">指定日期</option></select><span class="date-picker-slot"><input id="range-date" type="date" aria-label="选择具体训练日期" title="点击日历选择训练日期" hidden></span></div></div>
+        <div class="range-label"><label for="range">统计范围</label><div class="range-controls"><select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="day">指定日期</option></select><span class="date-picker-slot"><input id="range-date" type="date" readonly role="button" aria-label="选择具体训练日期" aria-haspopup="dialog" aria-expanded="false" aria-controls="date-calendar" title="点击打开日历，选中日期后保持展开" hidden><span id="date-calendar" class="date-calendar" role="dialog" aria-label="选择训练日期" hidden><span class="calendar-heading"><button id="calendar-prev" type="button" aria-label="上个月">‹</button><strong id="calendar-month" aria-live="polite"></strong><button id="calendar-next" type="button" aria-label="下个月">›</button></span><span class="calendar-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></span><span id="calendar-days" class="calendar-days" role="group" aria-label="训练日期"></span><span class="calendar-footer"><button id="calendar-clear" type="button">清除</button><span>选日期不关闭 · 点外部关闭</span><button id="calendar-today" type="button">今天</button></span></span></span></div></div>
       </div>
       <section id="welcome" class="welcome card"><span class="welcome-symbol" aria-hidden="true">▦</span><h2 id="welcome-title">正在读取腾讯文档</h2><p id="welcome-text">成功读取后，自动显示源表人员与成绩。没有示例或本地备用数据。</p></section>
       <section id="personal-panel" role="tabpanel" aria-labelledby="personal-tab" hidden>

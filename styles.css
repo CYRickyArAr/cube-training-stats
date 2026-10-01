@@ -75,14 +75,36 @@ main{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll
 .page-heading>.tabs{grid-column:2;grid-row:1;justify-self:center;flex:none;justify-content:center;margin:0}
 .page-heading>.range-label{grid-column:3;grid-row:1;justify-self:end;white-space:nowrap;margin:0}
 @media(max-width:950px){.page-heading{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:68px 42px;gap:8px 12px}.page-heading>.tabs{grid-column:1 / -1;grid-row:2}.page-heading>.range-label{grid-column:2;grid-row:1}.person-heading{width:auto}}
-@media(max-width:650px){.page-heading{grid-template-columns:minmax(0,1fr);grid-template-rows:62px 42px 68px;gap:8px}.page-heading>.tabs{grid-column:1;grid-row:2}.page-heading>.range-label{grid-column:1;grid-row:3;justify-self:end}.page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1}}
+@media(max-width:650px){.page-heading{grid-template-columns:minmax(0,1fr);grid-template-rows:62px 42px auto;gap:8px}.page-heading>.tabs{grid-column:1;grid-row:2}.page-heading>.range-label{grid-column:1;grid-row:3;justify-self:end}.page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1}}
 
-/* Keep the calendar in a reserved slot so filter changes never move view tabs. */
+/* Collapse the unused calendar row; heading anchors keep view tabs stable. */
 .range-label>label{margin:0;font:inherit;white-space:nowrap}
-.range-controls{display:grid;grid-template-rows:32px 32px;gap:4px;width:152px}
+.range-controls{display:grid;grid-auto-rows:32px;gap:4px;width:152px}
 .range-controls #range,.range-controls #range-date{display:block;width:100%;min-width:0;min-height:0;height:32px;margin:0;padding:3px 8px;font-size:16px}
 .date-picker-slot{display:block;height:32px;min-width:0}
-.page-heading>.range-label{height:68px}
+.date-picker-slot:has(input[hidden]){display:none}
+.page-heading>.range-label{height:auto;min-height:32px;align-items:center}
+
+/* Page-owned calendar: picking dates does not dismiss the popup. */
+.date-picker-slot{position:relative}
+.range-controls #range-date{cursor:pointer;padding-right:26px}
+#range-date::-webkit-calendar-picker-indicator{display:none}
+.date-picker-slot::after{content:'▦';position:absolute;right:8px;top:3px;color:var(--muted);pointer-events:none}
+.date-calendar{position:fixed;z-index:100;width:320px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);overflow:auto;padding:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.14);white-space:normal;font-size:16px}
+.calendar-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.calendar-heading strong{font-size:18px}
+.calendar-heading button{width:34px;height:34px;padding:0;font-size:24px;line-height:1}
+.calendar-weekdays,.calendar-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center}
+.calendar-weekdays{color:var(--muted);font-size:14px;margin-bottom:5px}
+.calendar-days button{position:relative;min-width:0;height:34px;padding:0;border:1px solid transparent;border-radius:6px;font-size:16px;line-height:1}
+.calendar-days button.outside-month{color:var(--muted)}
+.calendar-days button.has-records::after{content:'';position:absolute;bottom:3px;left:calc(50% - 2px);width:4px;height:4px;border-radius:50%;background:var(--blue)}
+.calendar-days button.selected{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:600}
+.calendar-days button.selected::after{background:#fff}
+.calendar-days button:disabled{opacity:.3;background:transparent;cursor:default}
+.calendar-footer{display:flex;align-items:center;justify-content:space-between;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+.calendar-footer button{padding:3px 6px;border:0;color:var(--blue);font-size:14px}
+.calendar-footer>span{font-size:12px;color:var(--muted)}
 
 /* Switch charts in the same card; distribution scroll stays inside the plot. */
 .chart-card>.card-heading{flex-wrap:nowrap;min-height:56px}
@@ -90,7 +112,11 @@ main{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll
 .chart-switch{display:flex;flex:0 0 auto;gap:3px;padding:3px;background:#f5f5f5;border:1px solid var(--line);border-radius:8px}
 .chart-switch button{font-size:16px;line-height:1.5;padding:3px 10px;border-color:transparent;background:transparent;border-radius:5px}
 .chart-switch button[aria-pressed=true]{color:var(--blue);background:#fff;border-color:var(--line)}
-.chart.is-distribution{overflow-x:auto;overflow-y:hidden;overscroll-behavior-x:contain}
+.chart.is-distribution{display:block;height:auto;min-height:218px;overflow:hidden;padding:0 8px}
+.chart.is-distribution .distribution-svg{width:100%;max-width:100%;max-height:none;display:block}
+.chart.is-distribution .distribution-svg text{font-size:16px;font-family:"Segoe UI","Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
+.chart.is-distribution .distribution-svg .distribution-tick{font-size:14px;font-weight:500}
+.chart.is-distribution .distribution-svg .distribution-count{font-size:14px}
 .chart-help .legend{margin-top:6px;display:flex}
 @media(max-width:650px){.chart-card>.card-heading{padding:10px;gap:6px}.chart-switch button{padding:3px 7px}.chart-switch{gap:1px}}
 

@@ -6,6 +6,7 @@
   let state = {version:1,people:[],records:[]};
   let snapshot = null, busy = false;
   let selected = null, view = 'personal', page = 1, chartMode = 'trend';
+  let calendarOpen = false, calendarMonth = '';
   const PAGE_SIZE = 20;
   const time = value => value == null ? '—' : C.formatScore(value);
   const percentage = value => value == null ? '—' : value.toFixed(1) + '%';
@@ -16,6 +17,22 @@
   const compareRecords = (a,b) => recordDate(a).localeCompare(recordDate(b)) || (a.sourceRow || 0)-(b.sourceRow || 0) || (a.sourceColumn || 0)-(b.sourceColumn || 0);
   const dateText = record => recordDate(record) || '日期未标注';
   const scoreText = record => record.score === null ? 'DNF' : record.sourceText != null && String(record.sourceText).trim() ? String(record.sourceText) : record.sourceValue != null ? String(record.sourceValue) : String(record.score/100);
+  // Only filter preferences live in tab-scoped storage; never scores or snapshots.
+  const FILTER_KEY = 'cube-stats-filter-v1';
+  function restoreFilter() {
+    try {
+      const saved = JSON.parse(window.sessionStorage?.getItem(FILTER_KEY) || 'null');
+      if (!saved || !['0','7','30','90','day'].includes(saved.range)) return;
+      if (typeof saved.date !== 'string' || (saved.date && (!/^\d{4}-\d{2}-\d{2}$/.test(saved.date) || new Date(saved.date+'T00:00:00Z').toISOString().slice(0,10) !== saved.date))) return;
+      $('#range').value = saved.range;
+      $('#range-date').value = saved.date;
+    } catch (_) { /* Unavailable storage or invalid preferences do not block reading. */ }
+  }
+  function saveFilter() {
+    try {
+      window.sessionStorage?.setItem(FILTER_KEY,JSON.stringify({range:$('#range').value,date:$('#range-date').value}));
+    } catch (_) { /* The page still works when tab storage is unavailable. */ }
+  }
   function rangeDates() {
     return state.records.map(recordDate).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
   }
@@ -25,6 +42,78 @@
     input.disabled = !dates.length;
     input.min = dates[0] || '';
     input.max = dates.at(-1) || '';
+    if (input.hidden || input.disabled) calendarOpen = false;
+    input.setAttribute('aria-expanded',String(calendarOpen));
+    $('#date-calendar').hidden = !calendarOpen;
+    if (calendarOpen) renderCalendar();
+  }
+  function chinaToday() {
+    return new Date(Date.now()+8*3600000).toISOString().slice(0,10);
+  }
+  function moveMonth(month, offset) {
+    const [year,number] = month.split('-').map(Number);
+    return new Date(Date.UTC(year,number-1+offset,1)).toISOString().slice(0,7);
+  }
+  function positionCalendar() {
+    if (!calendarOpen || !$('#range-date').getBoundingClientRect) return;
+    const rect = $('#range-date').getBoundingClientRect(), popup = $('#date-calendar');
+    const width = popup.offsetWidth, height = popup.offsetHeight;
+    const left = Math.max(12,Math.min(rect.right-width,window.innerWidth-width-12));
+    const below = rect.bottom+6;
+    const top = below+height <= window.innerHeight-12 ? below : Math.max(12,rect.top-height-6);
+    popup.style.left = left+'px';
+    popup.style.top = top+'px';
+  }
+  function renderCalendar() {
+    const input = $('#range-date'), dates = new Set(rangeDates());
+    const minMonth = input.min.slice(0,7), maxMonth = input.max.slice(0,7);
+    calendarMonth ||= (input.value || input.max).slice(0,7);
+    calendarMonth = calendarMonth < minMonth ? minMonth : calendarMonth > maxMonth ? maxMonth : calendarMonth;
+    const [year,month] = calendarMonth.split('-').map(Number);
+    $('#calendar-month').textContent = `${year}年${month}月`;
+    $('#calendar-prev').disabled = calendarMonth <= minMonth;
+    $('#calendar-next').disabled = calendarMonth >= maxMonth;
+    const today = chinaToday();
+    $('#calendar-today').disabled = today < input.min || today > input.max;
+    const first = new Date(Date.UTC(year,month-1,1));
+    const start = first.getTime()-((first.getUTCDay()+6)%7)*86400000;
+    $('#calendar-days').innerHTML = Array.from({length:42},(_,i) => {
+      const date = new Date(start+i*86400000).toISOString().slice(0,10);
+      const disabled = date < input.min || date > input.max;
+      const selectedDay = date === input.value;
+      const classes = [selectedDay ? 'selected' : '',date.slice(0,7) !== calendarMonth ? 'outside-month' : '',dates.has(date) ? 'has-records' : ''].filter(Boolean).join(' ');
+      return `<button type="button" data-calendar-date="${date}" class="${classes}" aria-label="${date}${dates.has(date) ? '，有训练记录' : ''}" aria-pressed="${selectedDay}"${date === today ? ' aria-current="date"' : ''}${disabled ? ' disabled' : ''}>${Number(date.slice(-2))}</button>`;
+    }).join('');
+    positionCalendar();
+  }
+  function focusCalendarDate() {
+    const selector = `[data-calendar-date="${$('#range-date').value}"]`;
+    $('#calendar-days').querySelector?.(selector)?.focus?.();
+  }
+  function openCalendar() {
+    const input = $('#range-date');
+    if (input.hidden || input.disabled) return;
+    calendarMonth = (input.value || input.max).slice(0,7);
+    calendarOpen = true;
+    renderDateRange();
+    focusCalendarDate();
+  }
+  function closeCalendar(returnFocus = false) {
+    calendarOpen = false;
+    $('#date-calendar').hidden = true;
+    $('#range-date').setAttribute('aria-expanded','false');
+    if (returnFocus) $('#range-date').focus();
+  }
+  function pickCalendarDate(date) {
+    const input = $('#range-date');
+    if (date && (date < input.min || date > input.max)) return;
+    input.value = date;
+    saveFilter();
+    if (date) calendarMonth = date.slice(0,7);
+    page = 1;
+    render();
+    // Selecting a date updates the statistics, but never dismisses the popup.
+    focusCalendarDate();
   }
   function recordsFor(personId) {
     const mode = $('#range').value;
@@ -126,38 +215,37 @@
   }
   function renderDistribution(records) {
     const {bins,valid,dnf,sparse} = C.histogram(records);
-    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}区间较多时可在图内横向滚动。`;
+    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}整体分布完整适应图表宽度，无需左右滚动。每个刻度表示该 0.10 秒区间的起点（如 6.0 表示 6.00 ≤ 用时 < 6.10）；刻度密集时分行错开，悬停可看完整区间。`;
     if (!valid) {
       $('#chart').innerHTML = `<div class="chart-empty"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组；不伪造有效用时柱。` : '请切换人员或统计范围。'}</div>`;
       return;
     }
-    // Reserve room for full interval labels, including large original values.
-    // Mobile retains the enlarged SVG text; thin the ticks instead of its font.
-    const labelSpace = bins.reduce((max,bin) => Math.max(max,bin.label.length),0)*15+20;
-    const L = Math.max(62,Math.ceil(labelSpace/2)), R = L, T = 40, B = 65, H = 300;
-    const W = Math.max(760,bins.length*24+L+R), minWidth = Math.max(320,bins.length*18+L+R);
+    // Fit the complete distribution to the card. Stagger compact tick labels
+    // into as many rows as needed rather than hiding ticks or adding x-scroll.
+    const W = Math.max(160,($('#chart').clientWidth || 760)-16);
+    const labelWidth = bins.reduce((max,bin) => Math.max(max,bin.start.toFixed(1).length),0)*8+12;
+    const L = 48, R = Math.max(16,Math.ceil(labelWidth/2)), T = 32;
+    const slot = (W-L-R)/bins.length;
+    const tickRows = Math.min(bins.length,Math.max(1,Math.ceil(labelWidth/slot)));
+    const B = 22+tickRows*20, H = Math.max(218,T+90+B);
     const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
-    const plotHeight = H-T-B, slot = (W-L-R)/bins.length, barWidth = Math.min(56,slot*.72);
+    const plotHeight = H-T-B, barWidth = Math.min(40,slot*.75);
     const x = i => L+slot*(i+.5), y = count => H-B-count/top*plotHeight;
-    let svg = `<svg class="distribution-svg" style="min-width:${minWidth}px" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
+    let svg = `<svg class="distribution-svg" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
     for (let i=0;i<=4;i++) {
       const count = i*step, yy = y(count);
       svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+5}" text-anchor="end" fill="#737373">${count}</text>`;
     }
-    const tickEvery = Math.max(1,Math.ceil(labelSpace/slot));
-    const ticks = [];
-    for (let i=0;i<bins.length-1;i+=tickEvery) ticks.push(i);
-    if (ticks.length > 1 && bins.length-1-ticks.at(-1) < tickEvery) ticks.pop();
-    ticks.push(bins.length-1);
-    const tickIndexes = new Set(ticks);
+    svg += `<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#d4d4d4"/>`;
     bins.forEach((bin,i) => {
       const title = `${bin.label} 秒（${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
-      svg += `<g><title>${escape(title)}</title><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="2" fill="#0070f3"/>`;
-      if (bin.count) svg += `<text x="${x(i)}" y="${y(bin.count)-7}" text-anchor="middle" fill="#171717">${bin.count}</text>`;
+      svg += `<g><title>${escape(title)}</title><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="4" fill="#0070f3"/>`;
+      if (bin.count && slot >= String(bin.count).length*8+4) svg += `<text class="distribution-count" x="${x(i)}" y="${y(bin.count)-7}" text-anchor="middle" fill="#171717">${bin.count}</text>`;
       // A full-column hover target also exposes zero-count bins.
       svg += `<rect x="${L+i*slot}" y="${T}" width="${slot}" height="${plotHeight}" fill="transparent"/></g>`;
-      if (sparse && i && bin.index-bins[i-1].index > 1) svg += `<text x="${L+i*slot}" y="${H-B+20}" text-anchor="middle" fill="#737373"><title>省略 ${(bin.index-bins[i-1].index-1)} 个无记录区间</title>⋯</text>`;
-      if (tickIndexes.has(i)) svg += `<text transform="translate(${x(i)},${H-B+26}) rotate(-20)" text-anchor="middle" fill="#737373">${escape(bin.label)}</text>`;
+      if (sparse && i && bin.index-bins[i-1].index > 1) svg += `<text x="${L+i*slot}" y="${H-B-4}" text-anchor="middle" fill="#737373"><title>省略 ${(bin.index-bins[i-1].index-1)} 个无记录区间</title>⋯</text>`;
+      const tickY = H-B+20+(i%tickRows)*20;
+      svg += `<line x1="${x(i)}" y1="${H-B}" x2="${x(i)}" y2="${tickY-13}" stroke="#e5e5e5"/><text class="distribution-tick" data-tick="${bin.index}" data-tick-row="${i%tickRows}" x="${x(i)}" y="${tickY}" text-anchor="middle" fill="#525252"><title>${escape(bin.label)} 秒</title><tspan>${bin.start.toFixed(1)}</tspan></text>`;
     });
     $('#chart').innerHTML = svg+'</svg>';
   }
@@ -216,7 +304,8 @@
     $('#notice').textContent = failed ? `${snapshot ? '腾讯文档读取失败，保留最后成功读取的旧数据。' : '腾讯文档首次读取失败，没有可展示的数据，也不会加载示例。'}${sync.error || '当前快照已过期。'} 请检查读取服务与腾讯文档后重试。` : '';
     const source = sync.source;
     $('#source-info').textContent = source ? [source.title,source.sheetName].filter(Boolean).join(' · ') : '等待读取源表信息';
-    // Online publication deliberately has no document URL or source link.
+    // The publication step supplies a credential-free link in HTML only.
+    // Snapshot data cannot change the source button's destination.
     $('#welcome-title').textContent = loading ? '正在读取腾讯文档' : failed ? '腾讯文档首次读取失败' : '源表暂未识别到人员';
     $('#welcome-text').textContent = failed ? '没有示例或本地备用数据。请确认读取服务可用，并点击「立即刷新」重试。' : '人员由腾讯表头自动识别；请在腾讯文档中维护源数据。';
   }
@@ -299,20 +388,58 @@
   $('#range').addEventListener('change',() => {
     const input = $('#range-date'), specific = $('#range').value === 'day';
     if (specific && !input.value) input.value = rangeDates().at(-1) || '';
+    saveFilter();
     page = 1; render();
-    if (specific && !input.disabled) {
-      input.focus();
-      // Native calendar opens on a user gesture; keyboard/older browsers can use the field.
-      try { input.showPicker?.(); } catch (_) { /* Native date input remains usable. */ }
-    }
+    if (specific && !input.disabled) openCalendar();
   });
+  $('#range-date').addEventListener('click',openCalendar);
+  $('#range-date').addEventListener('keydown',event => {
+    if (['Enter',' ','ArrowDown'].includes(event.key)) { event.preventDefault(); openCalendar(); }
+  });
+  $('#calendar-days').addEventListener('click',event => {
+    const button = event.target.closest('[data-calendar-date]');
+    if (button && !button.disabled) pickCalendarDate(button.dataset.calendarDate);
+  });
+  $('#calendar-days').addEventListener('keydown',event => {
+    const button = event.target.closest('[data-calendar-date]');
+    const offset = {ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7}[event.key];
+    if (!button || offset === undefined) return;
+    event.preventDefault();
+    const next = new Date(Date.parse(button.dataset.calendarDate+'T00:00:00Z')+offset*86400000).toISOString().slice(0,10);
+    const input = $('#range-date');
+    if (next < input.min || next > input.max) return;
+    calendarMonth = next.slice(0,7);
+    renderCalendar();
+    $('#calendar-days').querySelector?.(`[data-calendar-date="${next}"]`)?.focus?.();
+  });
+  for (const [id,offset] of [['calendar-prev',-1],['calendar-next',1]]) {
+    $('#'+id).addEventListener('click',() => {
+      if ($('#'+id).disabled) return;
+      calendarMonth = moveMonth(calendarMonth,offset);
+      renderCalendar();
+    });
+  }
+  $('#calendar-clear').addEventListener('click',() => pickCalendarDate(''));
+  $('#calendar-today').addEventListener('click',() => {
+    if (!$('#calendar-today').disabled) pickCalendarDate(chinaToday());
+  });
+  document.addEventListener('click',event => {
+    // The clicked day is replaced during render; its original event path still
+    // identifies an inside click even though target.closest() is now detached.
+    const insidePopup = event.composedPath?.().includes($('#date-calendar'));
+    if (calendarOpen && event.target !== $('#range') && !insidePopup && !event.target.closest('.date-picker-slot')) closeCalendar();
+  });
+  document.addEventListener('keydown',event => {
+    if (calendarOpen && event.key === 'Escape') { event.preventDefault(); closeCalendar(true); }
+  });
+  $('#stats-main').addEventListener('scroll',positionCalendar);
   for (const [id,mode] of [['trend-chart-tab','trend'],['histogram-chart-tab','distribution']]) {
     $('#'+id).addEventListener('click',() => {
       chartMode = mode;
       renderChart(recordsFor(selected));
     });
   }
-  $('#range-date').addEventListener('change',() => {page = 1; render();});
+  $('#range-date').addEventListener('change',() => {saveFilter(); page = 1; render();});
   $('#prev-page').addEventListener('click',() => {page = Math.max(1,page-1); render();});
   $('#next-page').addEventListener('click',() => {page++; render();});
   $('#personal-tab').addEventListener('click',() => {view = 'personal'; render(); $('#stats-main').scrollTo?.({top:0,behavior:'instant'});});
@@ -323,7 +450,12 @@
   $('#refresh-data').addEventListener('click',() => read(true));
   $('#auto-sync').addEventListener('change',autoRead);
   document.addEventListener('visibilitychange',autoRead);
+  window.addEventListener?.('resize',() => {
+    positionCalendar();
+    if (chartMode === 'distribution' && view === 'personal' && selected) renderChart(recordsFor(selected));
+  });
   setInterval(autoRead,60000);
+  restoreFilter();
   render();
   read();
 })();
