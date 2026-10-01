@@ -97,6 +97,26 @@
     });
     return {version:1, people, records};
   }
+  function histogram(records) {
+    const counts = new Map();
+    let valid = 0, dnf = 0;
+    for (const record of records) {
+      if (record.score === null) { dnf++; continue; }
+      const score = record.score;
+      // Source seconds become centiseconds; guard ONLY binary boundary noise,
+      // not decimal display rounding (6.099 still belongs below 6.10).
+      const index = Math.floor((score+Number.EPSILON*Math.max(1,Math.abs(score))*4)/10);
+      counts.set(index,(counts.get(index) || 0)+1);
+      valid++;
+    }
+    const indexes = [...counts.keys()].sort((a,b) => a-b);
+    const sparse = indexes.length > 0 && indexes.at(-1)-indexes[0]+1 > 160;
+    // Preserve large numeric source values without allocating all empty bins
+    // between them. Never drop an outlier or collapse it into a wider bin.
+    const visible = sparse || !indexes.length ? indexes : Array.from({length:indexes.at(-1)-indexes[0]+1},(_,i) => indexes[0]+i);
+    const bins = visible.map(index => ({index,start:index/10,endExclusive:(index+1)/10,label:`${(index/10).toFixed(2)}–${((index*10+9)/100).toFixed(2)}`,count:counts.get(index) || 0}));
+    return {bins,valid,dnf,sparse};
+  }
   function toCsv(state) {
     const cell = value => {
       let text = String(value ?? '');
@@ -111,7 +131,7 @@
     }
     return '\ufeff' + rows.map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = {parseScore, formatScore, analyze, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
+  const api = {parseScore, formatScore, analyze, histogram, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CubeStats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

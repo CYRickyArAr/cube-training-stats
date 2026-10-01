@@ -5,7 +5,7 @@
   const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
   let state = {version:1,people:[],records:[]};
   let snapshot = null, busy = false;
-  let selected = null, view = 'personal', page = 1;
+  let selected = null, view = 'personal', page = 1, chartMode = 'trend';
   const PAGE_SIZE = 20;
   const time = value => value == null ? '—' : C.formatScore(value);
   const percentage = value => value == null ? '—' : value.toFixed(1) + '%';
@@ -77,6 +77,13 @@
     renderHistory(records,stats.best);
   }
   function renderChart(records) {
+    const distribution = chartMode === 'distribution';
+    $('#chart-title').textContent = distribution ? 'ao5 用时分布' : 'ao5 变化趋势';
+    $('#trend-chart-tab').setAttribute('aria-pressed',!distribution);
+    $('#histogram-chart-tab').setAttribute('aria-pressed',distribution);
+    $('#chart-legend').hidden = distribution;
+    $('#chart').classList.toggle('is-distribution',distribution);
+    if (distribution) { renderDistribution(records); return; }
     const ordered = [...records].sort(compareRecords), shown = ordered.slice(-120);
     $('#chart-caption').textContent = shown.length ? `按训练日期、源表行号排序；悬停查看日期、源单元格与原始成绩。${ordered.length > 120 ? '仅绘制最近 120 组；指标仍统计当前范围全部记录。' : ''}红色 × 表示 DNF，不代表有效用时。未知日期排在已知日期之前。` : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
@@ -114,6 +121,43 @@
     });
     [...new Set([0,Math.floor((shown.length-1)/2),shown.length-1])].forEach(i => {
       svg += `<text x="${x(i)}" y="${H-13}" text-anchor="middle" fill="#737373" font-size="11">第 ${ordered.length-shown.length+i+1} 组</text>`;
+    });
+    $('#chart').innerHTML = svg+'</svg>';
+  }
+  function renderDistribution(records) {
+    const {bins,valid,dnf,sparse} = C.histogram(records);
+    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}区间较多时可在图内横向滚动。`;
+    if (!valid) {
+      $('#chart').innerHTML = `<div class="chart-empty"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组；不伪造有效用时柱。` : '请切换人员或统计范围。'}</div>`;
+      return;
+    }
+    // Reserve room for full interval labels, including large original values.
+    // Mobile retains the enlarged SVG text; thin the ticks instead of its font.
+    const labelSpace = bins.reduce((max,bin) => Math.max(max,bin.label.length),0)*15+20;
+    const L = Math.max(62,Math.ceil(labelSpace/2)), R = L, T = 40, B = 65, H = 300;
+    const W = Math.max(760,bins.length*24+L+R), minWidth = Math.max(320,bins.length*18+L+R);
+    const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
+    const plotHeight = H-T-B, slot = (W-L-R)/bins.length, barWidth = Math.min(56,slot*.72);
+    const x = i => L+slot*(i+.5), y = count => H-B-count/top*plotHeight;
+    let svg = `<svg class="distribution-svg" style="min-width:${minWidth}px" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
+    for (let i=0;i<=4;i++) {
+      const count = i*step, yy = y(count);
+      svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+5}" text-anchor="end" fill="#737373">${count}</text>`;
+    }
+    const tickEvery = Math.max(1,Math.ceil(labelSpace/slot));
+    const ticks = [];
+    for (let i=0;i<bins.length-1;i+=tickEvery) ticks.push(i);
+    if (ticks.length > 1 && bins.length-1-ticks.at(-1) < tickEvery) ticks.pop();
+    ticks.push(bins.length-1);
+    const tickIndexes = new Set(ticks);
+    bins.forEach((bin,i) => {
+      const title = `${bin.label} 秒（${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
+      svg += `<g><title>${escape(title)}</title><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="2" fill="#0070f3"/>`;
+      if (bin.count) svg += `<text x="${x(i)}" y="${y(bin.count)-7}" text-anchor="middle" fill="#171717">${bin.count}</text>`;
+      // A full-column hover target also exposes zero-count bins.
+      svg += `<rect x="${L+i*slot}" y="${T}" width="${slot}" height="${plotHeight}" fill="transparent"/></g>`;
+      if (sparse && i && bin.index-bins[i-1].index > 1) svg += `<text x="${L+i*slot}" y="${H-B+20}" text-anchor="middle" fill="#737373"><title>省略 ${(bin.index-bins[i-1].index-1)} 个无记录区间</title>⋯</text>`;
+      if (tickIndexes.has(i)) svg += `<text transform="translate(${x(i)},${H-B+26}) rotate(-20)" text-anchor="middle" fill="#737373">${escape(bin.label)}</text>`;
     });
     $('#chart').innerHTML = svg+'</svg>';
   }
@@ -262,6 +306,12 @@
       try { input.showPicker?.(); } catch (_) { /* Native date input remains usable. */ }
     }
   });
+  for (const [id,mode] of [['trend-chart-tab','trend'],['histogram-chart-tab','distribution']]) {
+    $('#'+id).addEventListener('click',() => {
+      chartMode = mode;
+      renderChart(recordsFor(selected));
+    });
+  }
   $('#range-date').addEventListener('change',() => {page = 1; render();});
   $('#prev-page').addEventListener('click',() => {page = Math.max(1,page-1); render();});
   $('#next-page').addEventListener('click',() => {page++; render();});
