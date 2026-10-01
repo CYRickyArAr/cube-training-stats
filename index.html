@@ -13,6 +13,10 @@
   <header class="topbar">
     <a class="brand" href="./index.html" aria-label="魔方成绩首页"><span class="cube-mark" aria-hidden="true">▦</span><span>魔方成绩<small>训练成绩 · 只读快照</small></span></a>
     <div class="top-actions"><a id="source-link" class="button-link" target="_blank" rel="noopener noreferrer" aria-disabled="true">打开腾讯文档</a><button id="refresh-data" type="button">刷新快照</button><button id="export-csv" type="button" disabled>导出 CSV</button></div>
+    <section class="sync-card" aria-label="腾讯文档读取状态">
+      <div class="sync-heading"><strong id="sync-status" role="status" aria-live="polite">正在读取腾讯文档…</strong><label class="auto-sync-label"><input id="auto-sync" type="checkbox" checked>每 60 秒检查新快照</label></div>
+      <p id="last-success" class="muted">成绩更新时间：尚未加载快照</p>
+    </section>
   </header>
   <div class="workspace">
     <aside class="sidebar">
@@ -21,10 +25,6 @@
       <div class="sidebar-foot"><strong>腾讯文档是唯一数据源</strong><p id="source-info" class="muted">等待读取源表信息</p><p>源表由 Actions 每 30 分钟读取。本站只展示公开统计快照；可通过顶部按钮打开腾讯源表，访问权限由腾讯文档控制。</p></div>
     </aside>
     <main id="stats-main" tabindex="-1">
-      <section class="sync-card card" aria-label="腾讯文档读取状态">
-        <div class="sync-heading"><strong id="sync-status" role="status" aria-live="polite">正在读取腾讯文档…</strong><label class="auto-sync-label"><input id="auto-sync" type="checkbox" checked>每 60 秒检查新快照</label></div>
-        <p id="last-success" class="muted">成绩更新时间：尚未加载快照</p>
-      </section>
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
       <section id="source-warnings" class="source-warnings" aria-label="腾讯源表读取警告" hidden></section>
       <div class="page-heading">
