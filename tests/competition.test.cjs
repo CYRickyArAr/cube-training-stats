@@ -95,7 +95,20 @@ test('all-range comparison sums attendance per day and displays non-competitors 
  ui.get('range-date').value='2026-09-23';ui.get('range-date').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'2'});assert.match(ui.get('competition-summary').textContent,/3 人比赛 · 计分 1 局/);
  ui.update({records:[...round([600,700],2,'2026-09-22'),record('c',500,3,'2026-09-23')]});ui.get('range').value='0';ui.get('range').dispatch('change');ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'0',c:'—'},'solo training is not a zero-point competition');
 });
-test('the competition column preserves existing mean sorting and unchanged personal statistics',async()=>{
+function displayedOrder(ui){return [...ui.get('comparison-body').innerHTML.matchAll(/data-competition-person="([^"]+)"/g)].map(m=>m[1]);}
+test('comparison sorts higher match points before faster mean and recomputes ordering for refresh and date filters',async()=>{
+ const ui=boot();await ui.flush();const records=[...round([600,500],2),...round([600,500],3),...round([600,1000],4)];ui.update({records});ui.get('refresh-data').dispatch('click');await ui.flush();
+ assert.deepEqual(displayedPoints(ui),{a:'1',b:'2',c:'—'});assert.deepEqual(displayedOrder(ui),['b','a','c'],'B has more points despite its slower average');
+ ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedOrder(ui),['b','a','c']);
+ ui.update({records:[...records,...round([500,700],5,'2026-09-30')]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'2',b:'2',c:'—'});assert.deepEqual(displayedOrder(ui),['a','b','c'],'equal points use faster mean');
+ ui.get('range').value='day';ui.get('range').dispatch('change');assert.deepEqual(displayedOrder(ui),['a','b','c']);ui.get('range-date').value='2026-09-29';ui.get('range-date').dispatch('change');assert.deepEqual(displayedOrder(ui),['b','a','c']);
+});
+test('zero-point competitors precede dashed solo trainers, and exact point/mean ties use name order',async()=>{
+ const ui=boot();await ui.flush();ui.update({records:[...round([null,700],2),record('c',300,3,'2026-09-30')]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'—'});assert.deepEqual(displayedOrder(ui),['b','a','c'],'0 points are real competition scores, not absence');
+ ui.update({people:[{id:'a',name:'Zulu'},{id:'b',name:'Alpha'},{id:'c',name:'Charlie'}],records:round([600,600],2)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedOrder(ui),['b','a','c']);
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');assert.match(html,/按累计比分从高到低/);assert.doesNotMatch(html,/按有效 ao5 均值排序|比分不改变原有均值排序/);
+});
+test('the competition column preserves unchanged personal statistics and uses mean only to break point ties',async()=>{
  const ui=boot();await ui.flush();const before={best:ui.get('metric-best').textContent,mean:ui.get('metric-mean').textContent,sub7:ui.get('metric-sub7').textContent};
  ui.get('comparison-tab').dispatch('click');const html=ui.get('comparison-body').innerHTML;assert.ok(html.indexOf('data-person="a"')<html.indexOf('data-person="b"'));assert.ok(html.indexOf('data-person="b"')<html.indexOf('data-person="c"'));
  const headings=[...fs.readFileSync(path.join(root,'index.html'),'utf8').slice(fs.readFileSync(path.join(root,'index.html'),'utf8').indexOf('<section id="comparison-panel"')).matchAll(/<th>(.*?)<\/th>/g)].map(m=>m[1]);assert.deepEqual(headings,['人员','累计比分','总组数 / DNF','最佳 ao5','平均 ao5','Sub7 率','标准差']);

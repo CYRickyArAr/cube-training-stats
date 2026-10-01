@@ -282,7 +282,8 @@
     const counts = match.participantCounts;
     const attendance = !counts.length ? '当天至少 2 人有成绩才能计比赛分' : counts.length === 1 ? `${counts[0]} 人比赛` : `按日 ${counts[0]}–${counts.at(-1)} 人比赛`;
     $('#competition-summary').textContent = `${attendance} · 计分 ${match.rounds} 局 · 不足人数、不完整或异常跳过 ${match.skippedRounds} 局${match.unmatchedRecords ? ` · ${match.unmatchedRecords} 条无源行号，未计分` : ''}${match.rounds ? '' : ' · 暂无可计分的完整局'}`;
-    rows.sort((a,b) => (a.stats.mean ?? Infinity)-(b.stats.mean ?? Infinity) || a.person.name.localeCompare(b.person.name,'zh-CN'));
+    const pointsForSort = id => match.roundsByPerson[id] ? match.points[id] : -1;
+    rows.sort((a,b) => pointsForSort(b.person.id)-pointsForSort(a.person.id) || (a.stats.mean ?? Infinity)-(b.stats.mean ?? Infinity) || a.person.name.localeCompare(b.person.name,'zh-CN'));
     $('#comparison-body').innerHTML = rows.length ? rows.map(({person,stats}) => `<tr><td><div class="comparison-name"><button type="button" data-person="${escape(person.id)}">${escape(person.name)}</button></div></td><td class="score competition-points${match.rounds && highest > 0 && match.points[person.id] === highest ? ' competition-leading' : ''}" data-competition-person="${escape(person.id)}">${match.roundsByPerson[person.id] ? match.points[person.id] : '—'}</td><td>${stats.total} / ${stats.dnf}</td><td class="score">${time(stats.best)}</td><td class="score">${time(stats.mean)}</td><td class="score">${percentage(stats.sub7Rate)}</td><td class="score">${stats.valid >= 2 ? time(stats.std) : '—'}</td></tr>`).join('') : '<tr><td colspan="7" class="empty-row">尚无腾讯源表数据可供对比。</td></tr>';
   }
   function render() {
