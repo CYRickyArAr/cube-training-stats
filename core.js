@@ -45,29 +45,40 @@
   function competition(people, records) {
     const ids = new Set(people.map(person => person.id));
     const points = Object.fromEntries([...ids].map(id => [id,0]));
-    const result = {participants:ids.size,rounds:0,skippedRounds:0,unmatchedRecords:0,points};
-    if (ids.size < 2) return result;
-    const rounds = new Map();
+    const roundsByPerson = Object.fromEntries([...ids].map(id => [id,0]));
+    const result = {participants:0,participantCounts:[],rounds:0,skippedRounds:0,unmatchedRecords:0,points,roundsByPerson};
+    const days = new Map(), attendees = new Set();
     for (const record of records) {
       if (!ids.has(record.personId)) continue;
+      const date = record.date || (record.at ? record.at.slice(0,10) : '');
+      if (!days.has(date)) days.set(date,{participants:new Set(),rounds:new Map()});
+      const day = days.get(date);
+      // Attendance is inferred per day (DNF is attendance). A registered person
+      // with no records that day must not block matches or increase their scale.
+      attendees.add(record.personId);
+      day.participants.add(record.personId);
       // Match actual source rows, never nth records or a shared date alone.
       if (!Number.isInteger(record.sourceRow) || record.sourceRow < 2) { result.unmatchedRecords++; continue; }
-      const date = record.date || (record.at ? record.at.slice(0,10) : '');
-      const key = JSON.stringify([date,record.sourceRow]);
-      if (!rounds.has(key)) rounds.set(key,{scores:new Map(),invalid:false});
-      const round = rounds.get(key);
+      if (!day.rounds.has(record.sourceRow)) day.rounds.set(record.sourceRow,{scores:new Map(),invalid:false});
+      const round = day.rounds.get(record.sourceRow);
       if (round.scores.has(record.personId) || (record.score !== null && (!Number.isFinite(record.score) || record.score <= 0))) round.invalid = true;
       round.scores.set(record.personId,record.score);
     }
-    for (const round of rounds.values()) {
-      if (round.invalid || round.scores.size !== ids.size) { result.skippedRounds++; continue; }
+    result.participants = attendees.size;
+    result.participantCounts = [...new Set([...days.values()].map(day => day.participants.size).filter(count => count >= 2))].sort((a,b) => a-b);
+    for (const day of days.values()) for (const round of day.rounds.values()) {
+      const count = day.participants.size;
+      if (count < 2 || round.invalid || round.scores.size !== count) { result.skippedRounds++; continue; }
       result.rounds++;
       const valid = [...round.scores.values()].filter(score => score !== null).sort((a,b) => a-b);
       // Standard competition ranking: equal times share rank, later ranks skip.
       // Use source precision, not rounded display times; DNF always earns zero.
       const ranks = new Map();
       valid.forEach((score,index) => { if (!ranks.has(score)) ranks.set(score,index+1); });
-      for (const [id,score] of round.scores) if (score !== null) points[id] += ids.size-ranks.get(score);
+      for (const [id,score] of round.scores) {
+        roundsByPerson[id]++;
+        if (score !== null) points[id] += count-ranks.get(score);
+      }
     }
     return result;
   }

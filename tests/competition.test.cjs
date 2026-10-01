@@ -8,13 +8,30 @@ const round=(scores,row,date)=>scores.map((score,i)=>record(String.fromCharCode(
 test('three people earn 2/1/0 per complete source row, with partial rounds skipped',()=>{
  const records=[...round([600,700,800],2),...round([800,600,700],3),...round([500,550],4)];
  const before=JSON.stringify(records),result=C.competition(people(3),records);
- assert.deepEqual(result,{participants:3,rounds:2,skippedRounds:1,unmatchedRecords:0,points:{a:2,b:3,c:1}});
+ assert.deepEqual(result,{participants:3,participantCounts:[3],rounds:2,skippedRounds:1,unmatchedRecords:0,points:{a:2,b:3,c:1},roundsByPerson:{a:2,b:2,c:2}});
  assert.equal(JSON.stringify(records),before,'score calculation never edits source records');
 });
 test('two people earn 1/0 and N-person matches use N minus rank',()=>{
  assert.deepEqual(C.competition(people(2),[...round([600,700],2),...round([800,700],3)]).points,{a:1,b:1});
  assert.deepEqual(C.competition(people(4),round([600,700,800,900],2)).points,{a:3,b:2,c:1,d:0});
  assert.equal(C.competition(people(1),round([600],2)).rounds,0);assert.deepEqual(C.competition([],[]).points,{});
+});
+test('absent roster members do not block a two-person day or increase its points scale',()=>{
+ const result=C.competition(people(3),[...round([600,700],2),...round([800,700],3)]);
+ assert.equal(result.participants,2);assert.deepEqual(result.participantCounts,[2]);assert.equal(result.rounds,2);assert.equal(result.skippedRounds,0);
+ assert.deepEqual(result.points,{a:1,b:1,c:0});assert.deepEqual(result.roundsByPerson,{a:2,b:2,c:0});
+ const dnf=C.competition(people(3),round([600,null],2));assert.equal(dnf.participants,2);assert.deepEqual(dnf.points,{a:1,b:0,c:0});assert.deepEqual(dnf.roundsByPerson,{a:1,b:1,c:0},'DNF is attendance, not absence');
+});
+test('multi-day ranges sum each day using its actual attendance, never the union of attendees',()=>{
+ const result=C.competition(people(3),[...round([600,700],2),...round([800,700,600],3,'2026-09-30'),record('c',500,4,'2026-09-28')]);
+ assert.deepEqual(result.participantCounts,[2,3]);assert.equal(result.participants,3);assert.equal(result.rounds,2);assert.equal(result.skippedRounds,1);
+ assert.deepEqual(result.points,{a:1,b:1,c:2});assert.deepEqual(result.roundsByPerson,{a:2,b:2,c:1});
+ const alternating=C.competition(people(3),[...round([600,700],2),record('b',600,3,'2026-09-30'),record('c',700,3,'2026-09-30')]);
+ assert.deepEqual(alternating.participantCounts,[2]);assert.deepEqual(alternating.points,{a:1,b:1,c:0});assert.deepEqual(alternating.roundsByPerson,{a:1,b:2,c:1});
+});
+test('a participant missing one round still invalidates that round even when another person is absent all day',()=>{
+ const result=C.competition(people(4),[...round([600,700,800],2),...round([600,700],3)]);
+ assert.equal(result.participants,3);assert.equal(result.rounds,1);assert.equal(result.skippedRounds,1);assert.deepEqual(result.points,{a:2,b:1,c:0,d:0});assert.equal(result.roundsByPerson.d,0);
 });
 test('ties share rank and points with later ranks skipped; source precision determines ties',()=>{
  assert.deepEqual(C.competition(people(3),round([600,600,700],2)).points,{a:2,b:2,c:0});
@@ -50,7 +67,7 @@ function boot(){
 function displayedPoints(ui){return Object.fromEntries([...ui.get('comparison-body').innerHTML.matchAll(/data-competition-person="([^"]+)">([^<]+)<\/td>/g)].map(m=>[m[1],m[2]]));}
 test('comparison cumulative points share date filtering, include undated records only in all, and survive refresh',async()=>{
  const ui=boot();await ui.flush();ui.get('comparison-tab').dispatch('click');
- assert.deepEqual(displayedPoints(ui),{a:'5',b:'5',c:'2'});assert.match(ui.get('competition-summary').textContent,/3 人比赛 · 计分 4 局 · 不完整或异常跳过 1 局/);
+ assert.deepEqual(displayedPoints(ui),{a:'5',b:'5',c:'2'});assert.match(ui.get('competition-summary').textContent,/3 人比赛 · 计分 4 局 · 不足人数、不完整或异常跳过 1 局/);
  ui.get('range').value='day';ui.get('range').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'2'});assert.match(ui.get('competition-summary').textContent,/计分 1 局/);
  ui.get('range-date').value='2026-09-29';ui.get('range-date').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'3',b:'3',c:'0'});
  ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'3',b:'3',c:'0'});assert.equal(ui.get('range-date').value,'2026-09-29');
@@ -60,9 +77,23 @@ test('comparison cumulative points share date filtering, include undated records
 });
 test('participant-count changes recompute the score scale; missing competitors and no complete rounds show a dash',async()=>{
  const ui=boot();await ui.flush();ui.update({people:people(2),records:[...round([600,700],2),...round([700,600],3)]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'1'});assert.match(ui.get('competition-summary').textContent,/2 人比赛 · 计分 2 局/);
- ui.update({people:people(3)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'—',b:'—',c:'—'});assert.match(ui.get('competition-summary').textContent,/计分 0 局 · 不完整或异常跳过 2 局/);
+ ui.update({people:people(3)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'1',c:'—'});assert.match(ui.get('competition-summary').textContent,/2 人比赛 · 计分 2 局/);
  ui.update({people:people(1),records:[record('a',600,2)]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'—'});assert.match(ui.get('competition-summary').textContent,/至少 2 人/);
  ui.update({people:[],records:[]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.match(ui.get('comparison-body').innerHTML,/colspan="7"/);
+});
+test('selected two-person date counts all 11 rounds, leaves absentee dashed, and distinguishes DNF zero from absence',async()=>{
+ const ui=boot();await ui.flush();const records=Array.from({length:11},(_,i)=>round([i===0?null:(i%2?600:800),700],i+2,'2026-09-22')).flat();
+ ui.update({records});ui.get('refresh-data').dispatch('click');await ui.flush();ui.get('range').value='day';ui.get('range').dispatch('change');
+ assert.equal(ui.get('range-date').value,'2026-09-22');assert.deepEqual(displayedPoints(ui),{a:'5',b:'6',c:'—'});assert.match(ui.get('competition-summary').textContent,/2 人比赛 · 计分 11 局 · 不足人数、不完整或异常跳过 0 局/);
+ ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'5',b:'6',c:'—'});
+ ui.update({records:round([600,null],2,'2026-09-22')});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'0',c:'—'});
+});
+test('all-range comparison sums attendance per day and displays non-competitors as a dash even if they trained alone',async()=>{
+ const ui=boot();await ui.flush();ui.update({records:[...round([600,700],2,'2026-09-22'),...round([800,700,600],3,'2026-09-23')]});ui.get('refresh-data').dispatch('click');await ui.flush();
+ assert.deepEqual(displayedPoints(ui),{a:'1',b:'1',c:'2'});assert.match(ui.get('competition-summary').textContent,/按日 2–3 人比赛 · 计分 2 局/);
+ ui.get('range').value='day';ui.get('range').dispatch('change');ui.get('range-date').value='2026-09-22';ui.get('range-date').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'1',b:'0',c:'—'});
+ ui.get('range-date').value='2026-09-23';ui.get('range-date').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'2'});assert.match(ui.get('competition-summary').textContent,/3 人比赛 · 计分 1 局/);
+ ui.update({records:[...round([600,700],2,'2026-09-22'),record('c',500,3,'2026-09-23')]});ui.get('range').value='0';ui.get('range').dispatch('change');ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'0',c:'—'},'solo training is not a zero-point competition');
 });
 test('the competition column preserves existing mean sorting and unchanged personal statistics',async()=>{
  const ui=boot();await ui.flush();const before={best:ui.get('metric-best').textContent,mean:ui.get('metric-mean').textContent,sub7:ui.get('metric-sub7').textContent};
