@@ -16,13 +16,25 @@
   const compareRecords = (a,b) => recordDate(a).localeCompare(recordDate(b)) || (a.sourceRow || 0)-(b.sourceRow || 0) || (a.sourceColumn || 0)-(b.sourceColumn || 0);
   const dateText = record => recordDate(record) || '日期未标注';
   const scoreText = record => record.score === null ? 'DNF' : record.sourceText != null && String(record.sourceText).trim() ? String(record.sourceText) : record.sourceValue != null ? String(record.sourceValue) : String(record.score/100);
+  function rangeDates() {
+    return state.records.map(recordDate).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
+  }
+  function renderDateRange() {
+    const input = $('#range-date'), dates = rangeDates();
+    input.hidden = $('#range').value !== 'day';
+    input.disabled = !dates.length;
+    input.min = dates[0] || '';
+    input.max = dates.at(-1) || '';
+  }
   function recordsFor(personId) {
-    const days = Number($('#range').value);
+    const mode = $('#range').value;
+    const days = mode === 'day' ? 0 : Number(mode);
     const chinaDay = new Date(Date.now()+8*3600000);
     const today = Date.UTC(chinaDay.getUTCFullYear(),chinaDay.getUTCMonth(),chinaDay.getUTCDate());
     const start = today-(days-1)*86400000;
     return state.records.filter(record => {
       if (record.personId !== personId) return false;
+      if (mode === 'day') return !!$('#range-date').value && recordDate(record) === $('#range-date').value;
       if (!days) return true;
       const date = recordDate(record);
       const day = date ? Date.parse(date+'T00:00:00Z') : NaN;
@@ -137,6 +149,7 @@
     $('#comparison-body').innerHTML = rows.length ? rows.map(({person,stats}) => `<tr><td><div class="comparison-name"><button type="button" data-person="${escape(person.id)}">${escape(person.name)}</button></div></td><td>${stats.total} / ${stats.dnf}</td><td class="score">${time(stats.best)}</td><td class="score">${time(stats.mean)}</td><td class="score">${stats.valid >= 2 ? time(stats.std) : '—'}</td><td class="score">${percentage(stats.sub7Rate)}</td></tr>`).join('') : '<tr><td colspan="6" class="empty-row">尚无腾讯源表数据可供对比。</td></tr>';
   }
   function render() {
+    renderDateRange();
     $('#people-count').textContent = state.people.length;
     $('#people-list').innerHTML = state.people.length ? state.people.map(person => {
       const count = state.records.filter(record => record.personId === person.id).length;
@@ -239,7 +252,17 @@
     render();
     $('#stats-main').scrollTo?.({top:0,behavior:'instant'});
   });
-  $('#range').addEventListener('change',() => {page = 1; render();});
+  $('#range').addEventListener('change',() => {
+    const input = $('#range-date'), specific = $('#range').value === 'day';
+    if (specific && !input.value) input.value = rangeDates().at(-1) || '';
+    page = 1; render();
+    if (specific && !input.disabled) {
+      input.focus();
+      // Native calendar opens on a user gesture; keyboard/older browsers can use the field.
+      try { input.showPicker?.(); } catch (_) { /* Native date input remains usable. */ }
+    }
+  });
+  $('#range-date').addEventListener('change',() => {page = 1; render();});
   $('#prev-page').addEventListener('click',() => {page = Math.max(1,page-1); render();});
   $('#next-page').addEventListener('click',() => {page++; render();});
   $('#personal-tab').addEventListener('click',() => {view = 'personal'; render(); $('#stats-main').scrollTo?.({top:0,behavior:'instant'});});

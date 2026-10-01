@@ -31,7 +31,7 @@
         <div id="person-heading" class="person-heading" hidden><div class="person-identity"><span id="active-avatar" class="avatar">人</span><div><h1 id="person-title"></h1><p id="person-subtitle" class="muted"></p></div></div></div>
         <h1 id="view-title">训练统计</h1>
         <div class="tabs" role="tablist" aria-label="统计视图"><button id="personal-tab" role="tab" aria-selected="true" aria-controls="personal-panel" type="button">个人分析</button><button id="comparison-tab" role="tab" aria-selected="false" aria-controls="comparison-panel" type="button">多人对比</button></div>
-        <label class="range-label">统计范围<select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option></select></label>
+        <div class="range-label"><label for="range">统计范围</label><div class="range-controls"><select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="day">指定日期</option></select><span class="date-picker-slot"><input id="range-date" type="date" aria-label="选择具体训练日期" title="点击日历选择训练日期" hidden></span></div></div>
       </div>
       <section id="welcome" class="welcome card"><span class="welcome-symbol" aria-hidden="true">▦</span><h2 id="welcome-title">正在读取腾讯文档</h2><p id="welcome-text">成功读取后，自动显示源表人员与成绩。没有示例或本地备用数据。</p></section>
       <section id="personal-panel" role="tabpanel" aria-labelledby="personal-tab" hidden>
@@ -46,7 +46,7 @@
           <section class="card analysis-card"><div class="card-heading"><h3>训练分析</h3></div><div id="analysis" class="analysis"></div></section>
         </div>
         <details class="card history-card"><summary class="card-heading"><h3>成绩记录 <span id="record-count" class="badge">0</span></h3><span class="disclosure-label">展开 / 收起明细</span></summary><p class="history-help muted">按训练日期、源表行号倒序；原始精度和来源位置保留。</p><div class="table-wrap"><table><thead><tr><th>训练日期</th><th>ao5（源表精度）</th><th>备注</th><th>来源单元格</th></tr></thead><tbody id="records-body"></tbody></table></div><div id="pagination" class="pagination" hidden><button id="prev-page" type="button">上一页</button><span id="page-info"></span><button id="next-page" type="button">下一页</button></div></details>
-        <details class="method-help"><summary>统计口径与注意事项</summary><p class="footnote">Sub7 率 = ao5 严格小于 7 秒的组数 / 当前范围总组数；7.00 秒不达标，DNF 计入总组数但不达标，按源表原始精度判断。每条是一组已计算的 ao5。DNF 不参与均值、中位数和标准差；异常大值仍计入统计。近期变化只反映最近 40 条有效记录，不代表长期结论。标准差 ÷ 均值为波动系数，样本少时谨慎解读。未知日期不补成今天，也不计入最近天数筛选。</p></details>
+        <details class="method-help"><summary>统计口径与注意事项</summary><p class="footnote">Sub7 率 = ao5 严格小于 7 秒的组数 / 当前范围总组数；7.00 秒不达标，DNF 计入总组数但不达标，按源表原始精度判断。每条是一组已计算的 ao5。DNF 不参与均值、中位数和标准差；异常大值仍计入统计。近期变化只反映最近 40 条有效记录，不代表长期结论。标准差 ÷ 均值为波动系数，样本少时谨慎解读。指定日期只统计当天源表成绩；未知日期不补成今天，也不计入日期筛选。</p></details>
       </section>
       <section id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab" hidden><section class="card"><div class="card-heading"><h3>多人训练对比</h3><p>同一统计范围 · 按有效 ao5 均值排序</p></div><div class="table-wrap"><table><thead><tr><th>人员</th><th>总组数 / DNF</th><th>最佳 ao5</th><th>平均 ao5</th><th>标准差</th><th>Sub7 率</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section><p class="footnote">样本数量不同，请谨慎比较。无有效成绩的人员排在最后。</p></section>
       <footer>公开训练统计 <span>每条记录是一组 ao5 · 修改数据请回源表</span></footer>

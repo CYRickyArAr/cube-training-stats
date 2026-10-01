@@ -75,7 +75,15 @@ main{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll
 .page-heading>.tabs{grid-column:2;grid-row:1;justify-self:center;flex:none;justify-content:center;margin:0}
 .page-heading>.range-label{grid-column:3;grid-row:1;justify-self:end;white-space:nowrap;margin:0}
 @media(max-width:950px){.page-heading{grid-template-columns:minmax(0,1fr) auto;grid-template-rows:68px 42px;gap:8px 12px}.page-heading>.tabs{grid-column:1 / -1;grid-row:2}.page-heading>.range-label{grid-column:2;grid-row:1}.person-heading{width:auto}}
-@media(max-width:650px){.page-heading{grid-template-columns:minmax(0,1fr);grid-template-rows:62px 42px 39px;gap:8px}.page-heading>.tabs{grid-column:1;grid-row:2}.page-heading>.range-label{grid-column:1;grid-row:3;justify-self:end}.page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1}}
+@media(max-width:650px){.page-heading{grid-template-columns:minmax(0,1fr);grid-template-rows:62px 42px 68px;gap:8px}.page-heading>.tabs{grid-column:1;grid-row:2}.page-heading>.range-label{grid-column:1;grid-row:3;justify-self:end}.page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1}}
+
+/* Keep the calendar in a reserved slot so filter changes never move view tabs. */
+.range-label>label{margin:0;font:inherit;white-space:nowrap}
+.range-controls{display:grid;grid-template-rows:32px 32px;gap:4px;width:152px}
+.range-controls #range,.range-controls #range-date{display:block;width:100%;min-width:0;min-height:0;height:32px;margin:0;padding:3px 8px;font-size:16px}
+.date-picker-slot{display:block;height:32px;min-width:0}
+.page-heading>.range-label{height:68px}
+
 
 
 
