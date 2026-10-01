@@ -42,6 +42,35 @@
       targetRate:n && target !== null ? values.filter(x => x <= target).length / n * 100 : null
     };
   }
+  function competition(people, records) {
+    const ids = new Set(people.map(person => person.id));
+    const points = Object.fromEntries([...ids].map(id => [id,0]));
+    const result = {participants:ids.size,rounds:0,skippedRounds:0,unmatchedRecords:0,points};
+    if (ids.size < 2) return result;
+    const rounds = new Map();
+    for (const record of records) {
+      if (!ids.has(record.personId)) continue;
+      // Match actual source rows, never nth records or a shared date alone.
+      if (!Number.isInteger(record.sourceRow) || record.sourceRow < 2) { result.unmatchedRecords++; continue; }
+      const date = record.date || (record.at ? record.at.slice(0,10) : '');
+      const key = JSON.stringify([date,record.sourceRow]);
+      if (!rounds.has(key)) rounds.set(key,{scores:new Map(),invalid:false});
+      const round = rounds.get(key);
+      if (round.scores.has(record.personId) || (record.score !== null && (!Number.isFinite(record.score) || record.score <= 0))) round.invalid = true;
+      round.scores.set(record.personId,record.score);
+    }
+    for (const round of rounds.values()) {
+      if (round.invalid || round.scores.size !== ids.size) { result.skippedRounds++; continue; }
+      result.rounds++;
+      const valid = [...round.scores.values()].filter(score => score !== null).sort((a,b) => a-b);
+      // Standard competition ranking: equal times share rank, later ranks skip.
+      // Use source precision, not rounded display times; DNF always earns zero.
+      const ranks = new Map();
+      valid.forEach((score,index) => { if (!ranks.has(score)) ranks.set(score,index+1); });
+      for (const [id,score] of round.scores) if (score !== null) points[id] += ids.size-ranks.get(score);
+    }
+    return result;
+  }
   function personFields(state, name, targetInput, id) {
     name = String(name).trim();
     if (!name || name.length > 40) throw new Error('姓名需要 1–40 个字符。');
@@ -131,7 +160,7 @@
     }
     return '\ufeff' + rows.map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = {parseScore, formatScore, analyze, histogram, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
+  const api = {parseScore, formatScore, analyze, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CubeStats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

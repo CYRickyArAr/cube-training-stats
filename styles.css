@@ -79,6 +79,14 @@ main{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scroll
 @media(max-width:1200px){.topbar{grid-template-columns:auto minmax(0,1fr);gap:6px 16px}.topbar>.top-actions{grid-column:2}.topbar>.sync-card{grid-column:1 / -1;grid-row:2;justify-content:flex-end;padding-top:6px;border-top:1px solid var(--line)}}
 @media(max-width:650px){.topbar{grid-template-columns:minmax(0,1fr);gap:8px}.topbar>.top-actions{grid-column:1;grid-row:2;justify-self:start;width:100%}.topbar>.sync-card{grid-column:1;grid-row:3;justify-content:space-between;gap:4px 8px}.topbar .auto-sync-label{order:2}.topbar #last-success{order:3;flex-basis:100%;text-align:left}}
 
+/* Match points are a table measure, not a competing summary card. */
+.competition-summary{padding:0 14px 10px;font-size:14px;line-height:1.6;color:var(--muted)}
+td.competition-points{font-family:"Segoe UI","Microsoft YaHei",sans-serif;font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
+td.competition-leading{color:var(--blue)}
+.competition-help{margin-top:8px;font-size:14px;color:var(--muted)}
+.competition-help summary{cursor:pointer}
+.competition-help p{margin-top:6px;max-width:80ch;line-height:1.8}
+
 /* Stable view controls: identity width never changes the tab anchor. */
 .page-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:68px;gap:16px;align-items:center}
 .page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1;min-width:0;max-width:100%;margin:0}

@@ -10,5 +10,5 @@ test('comparison data cells match Sub7 then standard deviation, including insuff
  const sandbox={document,CubeStats:C,console,setInterval(){},setTimeout,fetch:async()=>({ok:true,status:200,json:async()=>({data,lastSuccessAt:new Date().toISOString(),source:{title:'Test only'},stale:false,error:null})})};sandbox.window=sandbox;vm.runInNewContext(fs.readFileSync(path.join(root,'app.js'),'utf8'),sandbox);for(let i=0;i<12;i++)await Promise.resolve();
  const rows=[...elements.get('comparison-body').innerHTML.matchAll(/<tr>(.*?)<\/tr>/gs)].map(m=>[...m[1].matchAll(/<td[^>]*>(.*?)<\/td>/gs)].map(cell=>cell[1]));
  assert.equal(rows.length,2);
- for(const row of rows){const id=row[0].includes('data-person="a"')?'a':'b',stats=C.analyze(data.records.filter(r=>r.personId===id));assert.equal(row[4],stats.sub7Rate.toFixed(1)+'%');assert.equal(row[5],stats.valid>=2?C.formatScore(stats.std):'—');}
+ for(const row of rows){const id=row[0].includes('data-person="a"')?'a':'b',stats=C.analyze(data.records.filter(r=>r.personId===id));assert.equal(row.length,7);assert.equal(row[5],stats.sub7Rate.toFixed(1)+'%');assert.equal(row[6],stats.valid>=2?C.formatScore(stats.std):'—');}
 });
