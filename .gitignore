@@ -1,6 +1,9 @@
 source.cjs
 .env
 .env.*
+.dev.vars
+.dev.vars.*
+.wrangler/
 backups/
 dist/
 node_modules/
