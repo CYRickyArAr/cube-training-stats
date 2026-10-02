@@ -27,8 +27,6 @@
     const sorted = [...values].sort((a,b) => a-b);
     const mean = avg(values);
     const n = values.length;
-    const recentMean = avg(values.slice(-20));
-    const previousMean = n >= 40 ? avg(values.slice(-40,-20)) : null;
     const sub7Count = values.filter(value => value < 700).length;
     let streak = 0, longestSub7 = 0;
     for (const record of ordered) {
@@ -45,10 +43,29 @@
       mean, median:n ? (sorted[Math.floor((n-1)/2)] + sorted[Math.ceil((n-1)/2)]) / 2 : null,
       std:n ? Math.sqrt(avg(values.map(x => (x-mean)**2))) : null,
       cv:n ? Math.sqrt(avg(values.map(x => (x-mean)**2))) / mean * 100 : null,
-      recentMean, previousMean,
-      improvement:previousMean === null ? null : (previousMean-recentMean)/previousMean*100,
       targetRate:n && target !== null ? values.filter(x => x <= target).length / n * 100 : null
     };
+  }
+  function dailyComparison(records, personId, date) {
+    const days = new Map();
+    for (const record of records) {
+      if (record.personId !== personId) continue;
+      const day = record.date || (record.at ? record.at.slice(0,10) : '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !date || day > date) continue;
+      if (!days.has(day)) days.set(day,[]);
+      days.get(day).push(record);
+    }
+    const summary = day => {
+      const {total,valid,dnf,mean} = analyze(days.get(day) || []);
+      return {date:day,total,valid,dnf,mean};
+    };
+    const current = summary(date);
+    const previousDate = [...days.keys()].filter(day => day < date).sort().at(-1);
+    const previous = previousDate ? summary(previousDate) : null;
+    // Use each day's entire valid sample, not equally sized record windows.
+    // An all-DNF training day is still the previous day; do not skip it silently.
+    const improvement = current.mean !== null && previous?.mean != null ? (previous.mean-current.mean)/previous.mean*100 : null;
+    return {current,previous,improvement};
   }
   function competition(people, records) {
     const ids = new Set(people.map(person => person.id));
@@ -179,7 +196,7 @@
     }
     return '\ufeff' + rows.map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = {parseScore, formatScore, analyze, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
+  const api = {parseScore, formatScore, analyze, dailyComparison, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CubeStats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
