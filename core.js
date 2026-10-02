@@ -20,8 +20,8 @@
     const seconds = ((rounded % 6000) / 100).toFixed(2);
     return mins ? `${mins}:${seconds.padStart(5, '0')}` : seconds;
   }
-  function analyze(records, target = null) {
-    const ordered = [...records].sort((a,b) => (Date.parse(a.at) - Date.parse(b.at)) || ((a.sourceRow || 0) - (b.sourceRow || 0)));
+  function analyze(records, target = null, compare = (a,b) => (Date.parse(a.at) - Date.parse(b.at)) || ((a.sourceRow || 0) - (b.sourceRow || 0))) {
+    const ordered = [...records].sort(compare);
     const values = ordered.filter(r => r.score !== null).map(r => r.score);
     const avg = arr => arr.length ? arr.reduce((a,b) => a+b,0) / arr.length : null;
     const sorted = [...values].sort((a,b) => a-b);
@@ -30,7 +30,15 @@
     const recentMean = avg(values.slice(-20));
     const previousMean = n >= 40 ? avg(values.slice(-40,-20)) : null;
     const sub7Count = values.filter(value => value < 700).length;
+    let streak = 0, longestSub7 = 0;
+    for (const record of ordered) {
+      streak = record.score !== null && record.score < 700 ? streak+1 : 0;
+      longestSub7 = Math.max(longestSub7,streak);
+    }
     return {
+      // Nearest-rank P90: at least 90% of valid source times are <= this value.
+      p90:n ? sorted[Math.ceil(n*.9)-1] : null,
+      longestSub7:records.length ? longestSub7 : null,
       sub7Count, sub7Rate:records.length ? sub7Count / records.length * 100 : null,
       total: records.length, valid:n, dnf:records.length-n,
       best:n ? sorted[0] : null, worst:n ? sorted[n-1] : null,

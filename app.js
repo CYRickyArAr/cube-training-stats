@@ -131,14 +131,8 @@
     }).sort(compareRecords);
   }
   function analyze(records) {
-    const stats = C.analyze(records);
-    // core's chronological sort cannot order missing dates / same-day source rows.
-    const values = [...records].sort(compareRecords).filter(record => record.score !== null).map(record => record.score);
-    const mean = list => list.length ? list.reduce((sum,value) => sum+value,0)/list.length : null;
-    stats.recentMean = mean(values.slice(-20));
-    stats.previousMean = values.length >= 40 ? mean(values.slice(-40,-20)) : null;
-    stats.improvement = stats.previousMean === null ? null : (stats.previousMean-stats.recentMean)/stats.previousMean*100;
-    return stats;
+    // Use the same source chronology for streaks, recent changes and charts.
+    return C.analyze(records,null,compareRecords);
   }
   function renderPersonal() {
     const person = state.people.find(person => person.id === selected);
@@ -259,10 +253,9 @@
     }
     const stabilityTitle = stats.valid >= 2 ? `波动系数 ${percentage(stats.cv)}` : '暂不能判断稳定性';
     const stabilityText = stats.valid ? `中位数 ${time(stats.median)}；最慢 ${time(stats.worst)}` : '没有有效 ao5，无法计算分布。';
-    const dnfRate = stats.total ? percentage(stats.dnf/stats.total*100) : '—';
-    const validityTitle = `DNF 占比 ${dnfRate}`;
-    const validityText = `${stats.valid} 组有效 / ${stats.total} 组；有效率 ${stats.total ? percentage(stats.valid/stats.total*100) : '—'}`;
-    $('#analysis').innerHTML = `<div class="analysis-item"><span>近期变化</span><strong class="${trendClass}">${escape(trendTitle)}</strong><p>${escape(trendText)}</p></div><div class="analysis-item"><span>成绩分布</span><strong>${escape(stabilityTitle)}</strong><p>${escape(stabilityText)}</p></div><div class="analysis-item"><span>有效组 / DNF</span><strong>${escape(validityTitle)}</strong><p>${escape(validityText)}</p></div>`;
+    const p90Text = stats.valid ? `90% 有效 ao5 ≤ 此值，越低越好。${stats.valid < 10 ? '不足 10 组，仅供参考。' : ''}` : '没有有效 ao5，暂不能计算。';
+    const streakText = stats.total ? 'DNF 或 ≥7 秒中断；可跨日。' : '当前范围暂无 ao5 记录。';
+    $('#analysis').innerHTML = `<div class="analysis-item"><span>近期变化</span><strong class="${trendClass}">${escape(trendTitle)}</strong><p>${escape(trendText)}</p></div><div class="analysis-item"><span>成绩分布</span><strong>${escape(stabilityTitle)}</strong><p>${escape(stabilityText)}</p></div><div class="analysis-item"><span>P90 ao5</span><strong id="analysis-p90">${time(stats.p90)}</strong><p>${escape(p90Text)}</p></div><div class="analysis-item"><span>最长连续 Sub7</span><strong id="analysis-sub7-streak">${stats.longestSub7 === null ? '—' : `${stats.longestSub7} 组`}</strong><p>${escape(streakText)}</p></div>`;
   }
   function renderHistory(records,best) {
     const ordered = [...records].sort((a,b) => compareRecords(b,a));
