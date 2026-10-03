@@ -168,8 +168,8 @@
     $('#chart-legend').hidden = distribution;
     $('#chart').classList.toggle('is-distribution',distribution);
     if (distribution) { renderDistribution(records); return; }
-    const ordered = [...records].sort(compareRecords), shown = ordered.slice(-120);
-    $('#chart-caption').textContent = shown.length ? `按训练日期、源表行号排序；悬停查看日期、源单元格与原始成绩。${ordered.length > 120 ? '仅绘制最近 120 组；指标仍统计当前范围全部记录。' : ''}红色 × 表示 DNF，不代表有效用时。未知日期排在已知日期之前。` : '腾讯源表在当前范围没有训练记录。';
+    const shown = [...records].sort(compareRecords);
+    $('#chart-caption').textContent = shown.length ? `绘制当前范围全部 ${shown.length} 组，按训练日期、源表行号排序；仅画线，不画圆点。DNF 保留横轴位置并断开折线；孤立有效记录用短横线表示。悬停查看日期、源单元格与原始成绩。未知日期排在已知日期之前。` : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
       $('#chart').innerHTML = '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -177,12 +177,12 @@
     const values = shown.filter(record => record.score !== null).map(record => record.score);
     const W = 760, H = 300, L = 72, R = 25, T = 26, B = 53;
     const x = i => shown.length === 1 ? (W+L-R)/2 : L+i*(W-L-R)/(shown.length-1);
-    let low = values.length ? Math.min(...values) : 0, high = values.length ? Math.max(...values) : 1;
+    let low = values.length ? values.reduce((a,b) => Math.min(a,b),Infinity) : 0, high = values.length ? values.reduce((a,b) => Math.max(a,b),-Infinity) : 1;
     const padding = Math.max((high-low)*.18,50);
     low = Math.max(0,low-padding);
     high += padding;
     const y = value => T+(high-value)/(high-low)*(H-T-B);
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 趋势图：${shown.length} 组记录，用时越低越好"><title>ao5 训练趋势</title><desc>按训练日期与源表行号排列；每个点代表源表一组 ao5，DNF 用红色叉号表示。</desc>`;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-count="${shown.length}" aria-label="ao5 趋势图：${shown.length} 组记录，用时越低越好"><title>ao5 训练趋势</title><desc>绘制当前范围全部记录，按训练日期与源表行号排列；相邻有效 ao5 连线，不画圆点；DNF 处断开，孤立有效记录用短横线表示。</desc>`;
     if (values.length) {
       for (let i=0;i<=4;i++) {
         const value = low+(high-low)*i/4, yy = y(value);
@@ -191,20 +191,26 @@
     } else {
       svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">当前范围只有 DNF，没有有效用时曲线</text>`;
     }
-    for (let i=1;i<shown.length;i++) {
-      if (shown[i-1].score !== null && shown[i].score !== null) svg += `<line x1="${x(i-1)}" y1="${y(shown[i-1].score)}" x2="${x(i)}" y2="${y(shown[i].score)}" stroke="#0070f3" stroke-width="2" stroke-linecap="round"/>`;
-    }
+    const segments = [];
+    shown.forEach((record,i) => {
+      if (record.score === null) return;
+      const previousValid = i > 0 && shown[i-1].score !== null;
+      const nextValid = i+1 < shown.length && shown[i+1].score !== null;
+      if (!previousValid && !nextValid) {
+        const half = Math.min(3,(W-L-R)/Math.max(1,shown.length-1)/4);
+        segments.push(`M${Math.max(L,x(i)-half)},${y(record.score)} L${Math.min(W-R,x(i)+half)},${y(record.score)}`);
+      } else segments.push(`${previousValid ? 'L' : 'M'}${x(i)},${y(record.score)}`);
+    });
+    if (segments.length) svg += `<path class="trend-line" d="${segments.join(' ')}" fill="none" stroke="#0070f3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    // Invisible full-height hit regions keep every source tooltip available
+    // without drawing point markers or connecting across a DNF.
     shown.forEach((record,i) => {
       const title = `${dateText(record)} · ${record.sourceCell || '来源未标注'} · ao5 ${scoreText(record)}${record.note ? ' · '+record.note : ''}`;
-      if (record.score === null) {
-        const yy = H-B+12;
-        svg += `<g><title>${escape(title)}</title><path d="M${x(i)-4},${yy-4} l8,8 M${x(i)+4},${yy-4} l-8,8" stroke="#c43131" stroke-width="2"/><circle cx="${x(i)}" cy="${yy}" r="9" fill="transparent"/></g>`;
-      } else {
-        svg += `<circle cx="${x(i)}" cy="${y(record.score)}" r="${shown.length > 60 ? 2.5 : 4}" fill="#fff" stroke="#0070f3" stroke-width="2"><title>${escape(title)}</title></circle>`;
-      }
+      const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
+      svg += `<rect class="trend-hit" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
     [...new Set([0,Math.floor((shown.length-1)/2),shown.length-1])].forEach(i => {
-      svg += `<text x="${x(i)}" y="${H-13}" text-anchor="middle" fill="#737373" font-size="11">第 ${ordered.length-shown.length+i+1} 组</text>`;
+      svg += `<text x="${x(i)}" y="${H-13}" text-anchor="middle" fill="#737373" font-size="11">第 ${i+1} 组</text>`;
     });
     $('#chart').innerHTML = svg+'</svg>';
   }
