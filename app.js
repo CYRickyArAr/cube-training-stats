@@ -152,8 +152,8 @@
     $('#person-subtitle').textContent = `${stats.total} 组 · ${stats.valid} 组有效 · ${stats.dnf} 组 DNF`;
     $('#metric-best').textContent = time(stats.best);
     $('#metric-mean').textContent = time(stats.mean);
+    $('#metric-median').textContent = time(stats.median);
     $('#metric-sub7').textContent = percentage(stats.sub7Rate);
-    $('#metric-std').textContent = stats.valid >= 2 ? time(stats.std) : '—';
     $('#sub7-caption').textContent = stats.total ? `${stats.sub7Count} / ${stats.total} 组 < 7 秒，DNF 未达标` : '当前范围暂无 ao5 记录';
     renderChart(records);
     const trendDate = $('#range').value === 'day' ? $('#range-date').value : records.map(recordDate).filter(Boolean).sort().at(-1) || '';
@@ -260,11 +260,10 @@
       trendClass = equal ? '' : difference > 0 ? 'good' : 'bad';
     }
     const trendDetail = previous ? `上次 ${previous.date}：${previous.valid} 组有效；本次 ${current.date}：${current.valid} 组有效。各天全部有效 ao5 的均值，DNF 不参与。` : '按各训练日全部有效 ao5 比较，不要求固定组数。';
-    const stabilityTitle = stats.valid >= 2 ? `波动系数 ${percentage(stats.cv)}` : '暂不能判断稳定性';
-    const stabilityText = stats.valid ? `中位数 ${time(stats.median)}；最慢 ${time(stats.worst)}` : '没有有效 ao5，无法计算分布。';
+    const stabilityText = stats.valid >= 2 ? '越小，成绩越稳定；DNF 不参与。' : '至少 2 组有效 ao5 才能计算。';
     const p90Text = stats.valid ? `90% 有效 ao5 ≤ 此值，越低越好。${stats.valid < 10 ? '不足 10 组，仅供参考。' : ''}` : '没有有效 ao5，暂不能计算。';
     const streakText = stats.total ? 'DNF 或 ≥7 秒中断；可跨日。' : '当前范围暂无 ao5 记录。';
-    $('#analysis').innerHTML = `<div class="analysis-item" data-trend-date="${escape(current.date)}" data-previous-date="${escape(previous?.date || '')}"><span>日均变化 · 较上次训练</span><strong id="analysis-trend" class="${trendClass}">${escape(trendTitle)}</strong><p id="analysis-trend-caption" title="${escape(trendDetail)}">${escape(trendText)}</p></div><div class="analysis-item"><span>成绩分布</span><strong>${escape(stabilityTitle)}</strong><p>${escape(stabilityText)}</p></div><div class="analysis-item"><span>P90 ao5</span><strong id="analysis-p90">${time(stats.p90)}</strong><p>${escape(p90Text)}</p></div><div class="analysis-item"><span>最长连续 Sub7</span><strong id="analysis-sub7-streak">${stats.longestSub7 === null ? '—' : `${stats.longestSub7} 组`}</strong><p>${escape(streakText)}</p></div>`;
+    $('#analysis').innerHTML = `<div class="analysis-item" data-trend-date="${escape(current.date)}" data-previous-date="${escape(previous?.date || '')}"><span>日均变化 · 较上次训练</span><strong id="analysis-trend" class="${trendClass}">${escape(trendTitle)}</strong><p id="analysis-trend-caption" title="${escape(trendDetail)}">${escape(trendText)}</p></div><div class="analysis-item"><span>标准差</span><strong id="analysis-std">${stats.valid >= 2 ? time(stats.std) : '—'}</strong><p>${escape(stabilityText)}</p></div><div class="analysis-item"><span>P90 ao5</span><strong id="analysis-p90">${time(stats.p90)}</strong><p>${escape(p90Text)}</p></div><div class="analysis-item"><span>最长连续 Sub7</span><strong id="analysis-sub7-streak">${stats.longestSub7 === null ? '—' : `${stats.longestSub7} 组`}</strong><p>${escape(streakText)}</p></div>`;
   }
   function renderHistory(records,best) {
     const ordered = [...records].sort((a,b) => compareRecords(b,a));

@@ -38,6 +38,15 @@ test('analysis replaces DNF ratio with P90 and longest Sub7, following range, so
  ui.range('day','2026-09-29');ui.update([make(800,3)]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('range-date').value,'2026-09-29');assert.equal(metric(ui,'analysis-p90'),'8.00');assert.equal(metric(ui,'analysis-sub7-streak'),'0 组');
  ui.update([...records,make(1200,2,'2026-08-01')]);ui.get('refresh-data').dispatch('click');await ui.flush();ui.range('0');assert.equal(metric(ui,'analysis-p90'),'12.00');ui.range('7');assert.equal(metric(ui,'analysis-p90'),'7.00');assert.equal(metric(ui,'analysis-sub7-streak'),'3 组');
 });
+test('top median and lower standard deviation follow date/person filters, DNF, empty data and refresh',async()=>{
+ const ui=boot([make(600,2),make(800,3),make(null,4),make(1000,5,'2026-09-30'),make(null,2,'2026-09-28'),make(650,2,'2026-09-29','p2')]);await ui.flush();
+ assert.equal(ui.get('metric-median').textContent,'8.00');assert.equal(metric(ui,'analysis-std'),C.formatScore(C.analyze([{score:600},{score:800},{score:1000}]).std));
+ ui.range('day','2026-09-29');assert.equal(ui.get('metric-median').textContent,'7.00');assert.equal(metric(ui,'analysis-std'),'1.00');
+ ui.person('p2');assert.equal(ui.get('metric-median').textContent,'6.50');assert.equal(metric(ui,'analysis-std'),'—');assert.match(ui.get('analysis').innerHTML,/至少 2 组有效 ao5/);
+ ui.range('day','2026-09-30');assert.equal(ui.get('metric-median').textContent,'—');assert.equal(metric(ui,'analysis-std'),'—');
+ ui.person('p1');ui.range('day','2026-09-28');assert.equal(ui.get('metric-median').textContent,'—');assert.equal(metric(ui,'analysis-std'),'—');
+ ui.range('day','2026-09-29');ui.update([make(700,2),make(900,3),make(1100,4)]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('range-date').value,'2026-09-29');assert.equal(ui.get('metric-median').textContent,'9.00');assert.equal(metric(ui,'analysis-std'),'1.63');
+});
 test('unknown dates sort before known dates without joining a streak across DNF',async()=>{
  const ui=boot([make(600,2),make(600,3),make(null,99,null)]);await ui.flush();assert.equal(metric(ui,'analysis-sub7-streak'),'2 组');
  const large=boot([...Array.from({length:121},(_,i)=>make(600,i+2)),make(2000,123)]);await large.flush();assert.equal(metric(large,'analysis-sub7-streak'),'121 组');assert.equal(metric(large,'analysis-p90'),'6.00');assert.doesNotMatch(large.get('analysis').innerHTML,/不足 10 组/);
