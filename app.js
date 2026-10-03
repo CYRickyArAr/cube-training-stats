@@ -273,27 +273,12 @@
     // Dates remain in hover details, not crowded labels below the curve.
     $('#chart').innerHTML = svg+'</svg><div class="trend-tooltip" role="tooltip" aria-live="polite" hidden></div>';
   }
-  function renderDistribution(records) {
-    const {bins,valid,dnf,sparse} = C.histogram(records);
-    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}整体分布完整适应图表宽度，无需左右滚动。每个刻度表示该 0.10 秒区间的起点（如 6.0 表示 6.00 ≤ 用时 < 6.10）；刻度密集时分行错开，悬停可看完整区间。`;
-    if (!valid) {
-      $('#chart').innerHTML = `<div class="chart-empty"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组；不伪造有效用时柱。` : '请切换人员或统计范围。'}</div>`;
-      return;
-    }
-    // Fit the complete distribution to the card. Stagger compact tick labels
-    // into as many rows as needed rather than hiding ticks or adding x-scroll.
-    const W = Math.max(160,($('#chart').clientWidth || 760)-16);
-    const labelWidth = bins.reduce((max,bin) => Math.max(max,bin.start.toFixed(1).length),0)*8+12;
+  function distributionLayout(bins,{W,L,R,baseT,plotHeight}) {
     const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
-    const L = 48, R = Math.max(16,Math.ceil(labelWidth/2),Math.ceil(String(peak).length*9/2+4));
-    const slot = (W-L-R)/bins.length;
-    const tickRows = Math.min(bins.length,Math.max(1,Math.ceil(labelWidth/slot)));
-    const B = 22+tickRows*20, baseT = 32, baseH = Math.max(218,baseT+90+B);
-    const plotHeight = baseH-baseT-B, barWidth = Math.min(40,slot*.75);
-    const x = i => L+slot*(i+.5), baseY = count => baseH-B-count/top*plotHeight;
-    // Keep every nonzero count. Lift crowded labels above neighboring bars and
-    // earlier labels, then add headroom instead of hiding or shrinking numbers.
+    const slot = (W-L-R)/Math.max(1,bins.length), barWidth = Math.min(40,slot*.75);
+    const x = i => L+slot*(i+.5), baseY = count => baseT+plotHeight-count/top*plotHeight;
     const countLabels = [];
+    // Keep every nonzero count above its neighboring bars and other labels.
     bins.forEach((bin,i) => {
       if (!bin.count) return;
       const xx = x(i), width = String(bin.count).length*9;
@@ -308,9 +293,29 @@
       }
       countLabels.push({bin,x:xx,y:yy,width});
     });
-    const headroom = Math.max(0,Math.ceil(44-Math.min(...countLabels.map(label => label.y))));
+    const headroom = Math.max(0,Math.ceil(44-countLabels.reduce((min,label) => Math.min(min,label.y),44)));
+    return {step,top,slot,barWidth,x,baseY,countLabels,headroom};
+  }
+  function renderDistribution(records) {
+    const histogram = C.histogram(records), {bins,valid,dnf,sparse} = histogram;
+    // Reserve the same frame for every person at this range and viewport.
+    // Other people's histograms determine spacing only, never displayed counts.
+    const histograms = [histogram,...state.people.filter(person => person.id !== selected).map(person => C.histogram(recordsFor(person.id)))];
+    const W = Math.max(160,($('#chart').clientWidth || 760)-16), L = 48, baseT = 32;
+    const labelWidths = histograms.map(h => h.bins.reduce((max,bin) => Math.max(max,bin.start.toFixed(1).length),0)*8+12);
+    const R = histograms.reduce((max,h,i) => Math.max(max,Math.ceil(labelWidths[i]/2),Math.ceil(h.bins.reduce((digits,bin) => Math.max(digits,String(bin.count).length),1)*9/2+4)),16);
+    const tickRows = histograms.reduce((max,h,i) => Math.max(max,Math.min(h.bins.length,Math.ceil(labelWidths[i]*h.bins.length/(W-L-R)))),1);
+    const B = 22+tickRows*20, baseH = Math.max(218,baseT+90+B), plotHeight = baseH-baseT-B;
+    const layouts = histograms.map(h => distributionLayout(h.bins,{W,L,R,baseT,plotHeight}));
+    const headroom = layouts.reduce((max,layout) => Math.max(max,layout.headroom),0);
+    const {step,top,slot,barWidth,x,baseY,countLabels} = layouts[0];
     const T = baseT+headroom, H = baseH+headroom, y = count => baseY(count)+headroom;
-    let svg = `<svg class="distribution-svg" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
+    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}整体分布完整适应图表宽度，无需左右滚动。每个刻度表示该 0.10 秒区间的起点（如 6.0 表示 6.00 ≤ 用时 < 6.10）；刻度密集时分行错开，悬停可看完整区间。`;
+    if (!valid) {
+      $('#chart').innerHTML = `<div class="chart-empty" style="height:${H}px;display:grid;place-content:center"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组；不伪造有效用时柱。` : '请切换人员或统计范围。'}</div>`;
+      return;
+    }
+    let svg = `<svg class="distribution-svg" data-plot-top="${T}" data-plot-bottom="${H-B}" data-tick-rows="${tickRows}" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
     for (let i=0;i<=4;i++) {
       const count = i*step, yy = y(count);
       svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+5}" text-anchor="end" fill="#737373">${count}</text>`;

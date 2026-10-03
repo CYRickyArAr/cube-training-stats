@@ -36,18 +36,32 @@ test('all nonempty bins keep their count labels, shifting collisions above bars 
   }
  }
 });
+test('people share distribution frame, tick rows and empty-state height without sharing scores',async()=>{
+ const ui=boot();await ui.flush();let id=0;const make=(personId,count,score,date='2026-09-21')=>Array.from({length:count},()=>({id:'align'+(++id),personId,score,date,sourceRow:id+2,note:''}));
+ const records=[...make('p1',26,700),...Array.from({length:34},(_,i)=>make('p2',i%2?26:12,590+i*10)).flat(),...make('p1',1,500,'2026-09-20')];ui.replace(records);ui.get('refresh-data').dispatch('click');await ui.flush();
+ const frame=()=>{const svg=ui.get('chart').innerHTML;return [...svg.match(/data-plot-top="([\d.]+)" data-plot-bottom="([\d.]+)" data-tick-rows="(\d+)" style="width:100%;height:(\d+)px"/)].slice(1).map(Number);};
+ for(const width of [320,600,1200])for(const range of ['0','day']){
+  ui.get('chart').clientWidth=width;ui.get('range').value=range;ui.get('range').dispatch('change');ui.get('histogram-chart-tab').dispatch('click');ui.person('p1');const first=frame();assert.equal(binCount(ui),range==='0'?27:26);
+  ui.person('p2');assert.deepEqual(frame(),first,'plot and tick frame must not move on person switch');assert.equal(binCount(ui),646);ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(frame(),first);
+ }
+ ui.replace(records.map(r=>r.personId==='p2'?{...r,score:null}:r));ui.get('refresh-data').dispatch('click');await ui.flush();const emptyHeight=Number(ui.get('chart').innerHTML.match(/style="height:(\d+)px/)[1]);assert.match(ui.get('chart').innerHTML,/只有 DNF/);assert.equal(binCount(ui),0);ui.person('p1');assert.equal(frame()[3],emptyHeight,'DNF view keeps the same reserved height');
+});
 test('browser: every distribution count remains visible without overlaps after desktop/mobile resizing', {skip:process.env.CUBE_UI_TEST!=='1',timeout:45000},async()=>{
  const {TencentReader}=require('../tencent-reader.cjs');const browser=new TencentReader();
  try{
   await browser.start();const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link rel="stylesheet"[^>]*>/,()=>'<style>'+fs.readFileSync(path.join(root,'styles.css'),'utf8')+'</style>');const frame=(await browser.cdp('Page.getFrameTree')).frameTree.frame.id;await browser.cdp('Page.setDocumentContent',{frameId:frame,html});
   let id=0;const records=Array.from({length:34},(_,i)=>Array.from({length:i%7===0?0:i%3===0?17:13},()=>({id:'count'+(++id),personId:'p1',score:600+i*10,date:'2026-09-21',sourceRow:id+2,note:''}))).flat();
-  const payload={data:{version:1,people:[{id:'p1',name:'Test only'}],records,warnings:[]},lastSuccessAt:new Date().toISOString(),stale:false,error:null};await browser.evaluate(fs.readFileSync(path.join(root,'core.js'),'utf8'));await browser.evaluate(`window.fetch=async()=>({ok:true,status:200,json:async()=>(${JSON.stringify(payload)})})`);await browser.evaluate(fs.readFileSync(path.join(root,'app.js'),'utf8'));await browser.evaluate(`new Promise(r=>setTimeout(r,30))`);await browser.evaluate(`document.querySelector('#histogram-chart-tab').click()`);
+  const extra=[...Array.from({length:125},(_,i)=>({id:'other'+i,personId:'p2',score:700,date:'2026-09-21',sourceRow:i+2,note:''})),{id:'dnf',personId:'p3',score:null,date:'2026-09-21',sourceRow:2,note:''}];
+  const payload={data:{version:1,people:['p1','p2','p3'].map(id=>({id,name:id})),records:[...records,...extra],warnings:[]},lastSuccessAt:new Date().toISOString(),stale:false,error:null};await browser.evaluate(fs.readFileSync(path.join(root,'core.js'),'utf8'));await browser.evaluate(`window.fetch=async()=>({ok:true,status:200,json:async()=>(${JSON.stringify(payload)})})`);await browser.evaluate(fs.readFileSync(path.join(root,'app.js'),'utf8'));await browser.evaluate(`new Promise(r=>setTimeout(r,30))`);await browser.evaluate(`document.querySelector('#histogram-chart-tab').click()`);
   for(const width of [1366,768,390,320]){
    await browser.cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<650});await browser.evaluate(`new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
    const layout=await browser.evaluate(`(()=>{const svg=document.querySelector('.distribution-svg'),rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}},bars=[...svg.querySelectorAll('rect[data-bin]')].filter(e=>Number(e.dataset.count)>0);return {svg:rect(svg),overflow:document.documentElement.scrollWidth>innerWidth,bars:bars.map(e=>({...rect(e),count:Number(e.dataset.count)})),labels:[...svg.querySelectorAll('.distribution-count')].map(e=>({...rect(e),count:Number(e.textContent)})),summary:rect(svg.querySelector('text'))}})()`);
    assert.equal(layout.overflow,false);assert.equal(layout.labels.length,layout.bars.length);assert.equal(layout.labels.reduce((s,l)=>s+l.count,0),records.length);
    const overlaps=(a,b)=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
    for(const [i,l] of layout.labels.entries()){assert.ok(l.left>=layout.svg.left&&l.right<=layout.svg.right&&l.top>=layout.svg.top&&l.bottom<=layout.svg.bottom,width+'px label fits');assert.ok(!overlaps(l,layout.summary));for(const other of layout.labels.slice(0,i))assert.ok(!overlaps(l,other),width+'px no overlapping counts');for(const bar of layout.bars)assert.ok(!overlaps(l,bar),width+'px counts are not hidden inside bars');}
+   const frame=()=>browser.evaluate(`(()=>{const svg=document.querySelector('.distribution-svg'),c=document.querySelector('#chart'),r=c.getBoundingClientRect();return {height:r.height,top:svg?Number(svg.dataset.plotTop):null,bottom:svg?Number(svg.dataset.plotBottom):null,ticks:svg?Number(svg.dataset.tickRows):null}})()`);
+   const expected=await frame();await browser.evaluate(`document.querySelector('#people-list [data-person="p2"]').click()`);assert.deepEqual(await frame(),expected,width+'px fixed frame across different distributions');assert.equal(await browser.evaluate(`document.querySelector('.distribution-count').textContent`),'125');
+   await browser.evaluate(`document.querySelector('#people-list [data-person="p3"]').click()`);assert.equal((await frame()).height,expected.height,width+'px empty state retains height');await browser.evaluate(`document.querySelector('#people-list [data-person="p1"]').click()`);
   }
  }finally{await browser.close();}
 });
