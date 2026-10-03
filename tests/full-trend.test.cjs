@@ -15,20 +15,30 @@ const pathData=ui=>ui.chart().match(/class="trend-line" d="([^"]+)"/)?.[1]||'';
 const count=ui=>Number(ui.chart().match(/data-trend-days="(\d+)"/)?.[1]||0);
 test('daily trend uses every valid raw score per source date, preserves DNF days and excludes unknown dates without modifying records',()=>{
  const records=[make(699.9,2,'2026-09-29'),make(700,3,'2026-09-29'),make(null,4,'2026-09-29'),make(800,2),make(null,3),make(null,2,'2026-09-28'),make(500,99,null)].reverse();const before=JSON.stringify(records);
- assert.deepEqual(C.dailyTrend(records),{days:[{date:'2026-09-28',total:1,valid:0,dnf:1,mean:null},{date:'2026-09-29',total:3,valid:2,dnf:1,mean:699.95},{date:'2026-09-30',total:2,valid:1,dnf:1,mean:800}],undatedRecords:1});assert.equal(JSON.stringify(records),before);
+ assert.deepEqual(C.dailyTrend(records),{days:[{date:'2026-09-28',total:1,valid:0,dnf:1,mean:null,carried:false,sourceDate:null},{date:'2026-09-29',total:3,valid:2,dnf:1,mean:699.95,carried:false,sourceDate:'2026-09-29'},{date:'2026-09-30',total:2,valid:1,dnf:1,mean:800,carried:false,sourceDate:'2026-09-30'}],undatedRecords:1});assert.equal(JSON.stringify(records),before);
  assert.equal(C.dailyTrend([{...make(600,2,'2026-09-30'),at:'2026-09-29T16:00:00Z'}]).days[0].date,'2026-09-30','source calendar date wins over UTC timestamp');
  assert.equal(C.dailyTrend([{...make(600,2,'2026-09-30'),date:null}]).days[0].date,'2026-09-30','timestamp fallback matches source date filtering');
  assert.deepEqual(C.dailyTrend([]),{days:[],undatedRecords:0});assert.equal(C.dailyTrend([make(999900,2)]).days[0].mean,999900,'do not remove large valid times');
 });
+test('carry-forward covers calendar boundaries and range-leading gaps without changing source samples',()=>{
+ const records=[make(600,2,'2024-02-28'),make(800,2,'2024-03-02'),make(500,2,'2024-03-04')],before=JSON.stringify(records);
+ const result=C.dailyTrend(records,{startDate:'2024-02-29',endDate:'2024-03-03'});
+ assert.deepEqual(result.days.map(d=>[d.date,d.mean,d.carried,d.sourceDate,d.total]),[['2024-02-29',600,true,'2024-02-28',0],['2024-03-01',600,true,'2024-02-28',0],['2024-03-02',800,false,'2024-03-02',1],['2024-03-03',800,true,'2024-03-02',0]]);assert.equal(JSON.stringify(records),before);
+ assert.deepEqual(C.dailyTrend([make(700,2,'2025-12-31')],{startDate:'2025-12-31',endDate:'2026-01-02'}).days.map(d=>d.date),['2025-12-31','2026-01-01','2026-01-02']);
+ assert.equal(C.dailyTrend(records,{startDate:'2024-02-30',endDate:'2024-03-03'}).days.length,0);assert.equal(C.dailyTrend(records,{startDate:'2024-03-03',endDate:'2024-02-28'}).days.length,0);
+ const empty=C.dailyTrend([],{startDate:'2026-09-24',endDate:'2026-09-30'});assert.equal(empty.days.length,7);assert.ok(empty.days.every(d=>d.mean===null&&!d.carried));
+ const dnf=C.dailyTrend([make(600,2,'2026-09-20'),make(null,2,'2026-09-22'),make(700,2,'2026-09-25')],{startDate:'2026-09-21',endDate:'2026-09-26'});assert.deepEqual(dnf.days.map(d=>d.mean),[600,null,null,null,700,700]);assert.equal(C.dailyTrend([make(600,2,'2026-09-20'),make(null,2,'2026-09-22')],{startDate:'2026-09-24',endDate:'2026-09-25'}).days[0].mean,null,'do not carry through a prior all-DNF day');
+});
 test('many records on one day become one daily mean, while all 130 training days remain plotted without dots',async()=>{
  const records=Array.from({length:1000},(_,i)=>make(600+i%30,i+2)).reverse();const ui=boot(records);await ui.flush();assert.equal(count(ui),1);assert.equal((ui.chart().match(/class="trend-hit"/g)||[]).length,1);assert.match(ui.chart(),/1000 组有效 \/ 0 组 DNF · 共 1000 组/);assert.match(ui.chart(),/均值 /);assert.match(ui.chart(),/2026-09-30/);assert.doesNotMatch(ui.chart(),/<circle|第 \d+ 组|NaN|Infinity/);
- const manyDays=Array.from({length:130},(_,i)=>make(600+i%30,i+2,new Date(Date.UTC(2026,0,i+1)).toISOString().slice(0,10))).reverse();const large=boot(manyDays);await large.flush();assert.equal(count(large),130);assert.equal((pathData(large).match(/L/g)||[]).length,129);assert.equal((large.chart().match(/class="trend-hit"/g)||[]).length,130);assert.ok(large.chart().indexOf('data-date="2026-01-01"')<large.chart().indexOf('data-date="2026-05-10"'));assert.doesNotMatch(large.get('chart-caption').textContent,/最近 120/);
+ const manyDays=Array.from({length:130},(_,i)=>make(600+i%30,i+2,new Date(Date.UTC(2026,0,i+1)).toISOString().slice(0,10))).reverse();const large=boot(manyDays);await large.flush();assert.equal(count(large),273);assert.equal((pathData(large).match(/L/g)||[]).length,272);assert.equal((large.chart().match(/class="trend-hit"/g)||[]).length,273);assert.equal((large.chart().match(/data-carried="true"/g)||[]).length,143);assert.ok(large.chart().indexOf('data-date="2026-01-01"')<large.chart().indexOf('data-date="2026-05-10"'));assert.doesNotMatch(large.get('chart-caption').textContent,/最近 120/);
 });
-test('only all-DNF days break the line; mixed days use valid means and missing calendar dates are not invented',async()=>{
+test('only all-DNF days break the line; rest days carry the previous mean without adding training records',async()=>{
  const records=[600,700,null,650,null,500,550].flatMap((s,i)=>[make(s,2,`2026-09-${String(i+20).padStart(2,'0')}`),make(null,3,`2026-09-${String(i+20).padStart(2,'0')}`)]);
- const ui=boot(records);await ui.flush();assert.equal(count(ui),7);
- const groups=pathData(ui).split('M').filter(Boolean).map(s=>[...s.matchAll(/(?:^|L)([\d.]+),([\d.]+)/g)].map(m=>Number(m[1])));assert.deepEqual(groups,[[72,182.5],[400.5,406.5],[624.5,735]]);assert.equal((ui.chart().match(/data-mean=""/g)||[]).length,2);assert.doesNotMatch(ui.chart(),/<circle|#c43131/);
- const sparse=boot([make(600,2,'2026-09-01'),make(700,2,'2026-09-30')]);await sparse.flush();assert.equal(count(sparse),2);assert.equal((pathData(sparse).match(/L/g)||[]).length,1);
+ const ui=boot(records);await ui.flush();assert.equal(count(ui),11);
+ const groups=pathData(ui).split('M').filter(Boolean).map(s=>[...s.matchAll(/(?:^|L)([\d.]+),([\d.]+)/g)].map(m=>Number(m[1])));assert.deepEqual(groups.map(group=>group.length),[2,2,6]);assert.equal((ui.chart().match(/data-mean=""/g)||[]).length,2);assert.doesNotMatch(ui.chart(),/<circle|#c43131/);
+ const sparse=boot([make(600,2,'2026-09-01'),make(700,2,'2026-09-30')]);await sparse.flush();assert.equal(count(sparse),30);assert.equal((pathData(sparse).match(/L/g)||[]).length,29);assert.equal((sparse.chart().match(/data-carried="true"/g)||[]).length,28);
+ const points=[...pathData(sparse).matchAll(/[ML]([\d.]+),([\d.]+)/g)].map(m=>({x:Number(m[1]),y:Number(m[2])}));assert.equal(new Set(points.slice(0,29).map(p=>p.y)).size,1,'rest days render horizontal, not a diagonal interpolation');assert.notEqual(points[29].y,points[28].y);
 });
 test('single, equal, all-DNF, undated and empty daily samples render honestly',async()=>{
  for(const scores of [[600],[600,600],[null],[null,null],[null,600,null],[]]){
@@ -37,6 +47,13 @@ test('single, equal, all-DNF, undated and empty daily samples render honestly',a
   if(scores.length&&scores.every(s=>s===null))assert.match(ui.chart(),/只有 DNF/);if(!scores.length)assert.match(ui.chart(),/没有训练记录/);
  }
  const unknown=boot([make(600,2,null)]);await unknown.flush();assert.equal(count(unknown),0);assert.match(unknown.chart(),/没有可用训练日期/);assert.match(unknown.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(unknown.get('metric-mean').textContent,'6.00','undated score remains in all-range metrics');
+});
+test('a no-training selected date may display a carried mean, but metrics, history, streak and distribution remain empty',async()=>{
+ const ui=boot([make(600,2,'2026-09-20')]);await ui.flush();assert.equal(count(ui),11);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,10);
+ ui.range('day','2026-09-24');assert.equal(count(ui),1);assert.match(ui.chart(),/无训练记录，沿用 2026-09-20 日均值 6.00/);assert.match(ui.chart(),/沿用均值 6.00/);assert.equal(ui.get('metric-mean').textContent,'—');assert.equal(ui.get('metric-sub7').textContent,'—');assert.equal(ui.get('record-count').textContent,0);assert.match(ui.get('analysis').innerHTML,/id="analysis-sub7-streak">—/);
+ ui.get('histogram-chart-tab').dispatch('click');assert.match(ui.chart(),/没有训练记录/);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),1);
+ ui.person('p2');assert.doesNotMatch(ui.chart(),/class="trend-line"/);assert.match(ui.chart(),/没有可沿用的日均值/);
+ ui.person('p1');ui.range('7');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,7);assert.equal(ui.get('record-count').textContent,0);assert.equal(ui.get('metric-mean').textContent,'—');
 });
 test('trend hides bottom date labels but keeps complete dates in hover details for single and multiple days',async()=>{
  for(const records of [[make(600,2)],[make(600,2,'2026-09-20'),make(700,3)]]){
@@ -48,8 +65,8 @@ test('trend hides bottom date labels but keeps complete dates in hover details f
 });
 test('daily trend follows date/person/range filters; distribution and personal metrics still use individual records',async()=>{
  const records=[...Array.from({length:200},(_,i)=>make(600,i+2,'2026-09-20')),...Array.from({length:130},(_,i)=>make(700,i+202)),make(500,999,null),make(800,2,'2026-09-30','p2')];
- const ui=boot(records);await ui.flush();assert.equal(count(ui),2);assert.match(ui.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(ui.get('record-count').textContent,331);
- ui.range('day','2026-09-30');assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="700"/);assert.equal(ui.get('metric-mean').textContent,'7.00');ui.range('7');assert.equal(count(ui),1);
- ui.get('histogram-chart-tab').dispatch('click');assert.equal([...ui.chart().matchAll(/data-count="(\d+)"/g)].reduce((sum,m)=>sum+Number(m[1]),0),130);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),1);
- ui.person('p2');assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="800"/);ui.update([make(600,2,'2026-09-30','p2'),make(650,3,'2026-09-30','p2')]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="625"/);assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],true);
+ const ui=boot(records);await ui.flush();assert.equal(count(ui),11);assert.match(ui.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(ui.get('record-count').textContent,331);
+ ui.range('day','2026-09-30');assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="700"/);assert.equal(ui.get('metric-mean').textContent,'7.00');ui.range('7');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,6);
+ ui.get('histogram-chart-tab').dispatch('click');assert.equal([...ui.chart().matchAll(/data-count="(\d+)"/g)].reduce((sum,m)=>sum+Number(m[1]),0),130);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),7);
+ ui.person('p2');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-mean=""/g)||[]).length,6,'no backfill before the first-ever training day');assert.match(ui.chart(),/data-mean="800"/);ui.update([make(600,2,'2026-09-30','p2'),make(650,3,'2026-09-30','p2')]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(count(ui),7);assert.match(ui.chart(),/data-mean="625"/);assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],true);
 });

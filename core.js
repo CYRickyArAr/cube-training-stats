@@ -46,20 +46,43 @@
       targetRate:n && target !== null ? values.filter(x => x <= target).length / n * 100 : null
     };
   }
-  // The caller supplies the current person's range-filtered records.
-  function dailyTrend(records) {
+  // Full history of ONE person may seed the range's first missing day.
+  // Carry-forward values exist only in this chart model, never source records.
+  function dailyTrend(records, {startDate,endDate} = {}) {
+    const dateStamp = date => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date || '')) return NaN;
+      const stamp = Date.parse(date+'T00:00:00Z');
+      return Number.isFinite(stamp) && new Date(stamp).toISOString().slice(0,10) === date ? stamp : NaN;
+    };
     const grouped = new Map();
     let undatedRecords = 0;
     for (const record of records) {
       const date = record.date || (record.at ? record.at.slice(0,10) : '');
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { undatedRecords++; continue; }
+      if (!Number.isFinite(dateStamp(date))) { undatedRecords++; continue; }
       if (!grouped.has(date)) grouped.set(date,{date,total:0,valid:0,dnf:0,sum:0});
       const day = grouped.get(date);
       day.total++;
       if (record.score === null) day.dnf++;
       else { day.valid++; day.sum += record.score; }
     }
-    const days = [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date)).map(({sum,...day}) => ({...day,mean:day.valid ? sum/day.valid : null}));
+    const dates = [...grouped.keys()].sort();
+    const start = startDate ?? dates[0], end = endDate ?? dates.at(-1);
+    const from = dateStamp(start), to = dateStamp(end), days = [];
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) return {days,undatedRecords};
+    const previousDate = dates.filter(date => date < start).at(-1);
+    const previous = grouped.get(previousDate);
+    let carriedMean = previous?.valid ? previous.sum/previous.valid : null;
+    let sourceDate = carriedMean === null ? null : previousDate;
+    for (let stamp=from;stamp<=to;stamp+=86400000) {
+      const date = new Date(stamp).toISOString().slice(0,10), recorded = grouped.get(date);
+      if (recorded) {
+        const {sum,...day} = recorded;
+        carriedMean = day.valid ? sum/day.valid : null;
+        // A real all-DNF day is not rest: leave a gap until a new valid day.
+        sourceDate = carriedMean === null ? null : date;
+        days.push({...day,mean:carriedMean,carried:false,sourceDate});
+      } else days.push({date,total:0,valid:0,dnf:0,mean:carriedMean,carried:carriedMean !== null,sourceDate});
+    }
     return {days,undatedRecords};
   }
   function dailyComparison(records, personId, date) {

@@ -168,9 +168,15 @@
     $('#chart-legend').hidden = distribution;
     $('#chart').classList.toggle('is-distribution',distribution);
     if (distribution) { renderDistribution(records); return; }
-    const {days:shown,undatedRecords} = C.dailyTrend(records);
-    const undatedText = undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
-    $('#chart-caption').textContent = records.length ? `当前范围按 ${shown.length} 个训练日汇总，每天取当天全部有效 ao5 的平均值，DNF 不参与均值。按训练日期等距排列，无训练的日期不补值；全 DNF 日断开连线。只画线，不画圆点；单个或孤立日均值用短横线表示。底部不标日期，悬停查看日期、日均值及有效 / DNF 组数。${undatedText}` : '腾讯源表在当前范围没有训练记录。';
+    const mode = $('#range').value, today = chinaToday();
+    const history = state.records.filter(record => record.personId === selected);
+    const dates = history.map(recordDate).filter(Boolean).sort();
+    const endDate = mode === 'day' ? $('#range-date').value : mode === '0' && dates.at(-1) > today ? dates.at(-1) : today;
+    const startDate = mode === 'day' ? endDate : mode === '0' ? dates[0] : new Date(Date.parse(today+'T00:00:00Z')-(Number(mode)-1)*86400000).toISOString().slice(0,10);
+    const {days:shown,undatedRecords} = C.dailyTrend(history,{startDate,endDate});
+    const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
+    const trainingDays = shown.filter(day => day.total).length, carriedDays = shown.filter(day => day.carried).length;
+    $('#chart-caption').textContent = shown.length ? `按自然日逐天绘制，共 ${shown.length} 天（${trainingDays} 个训练日，${carriedDays} 天沿用均值）。有训练时取当天全部有效 ao5 的平均值，DNF 不参与；无训练记录时沿用此前日均值，保持水平，只用于画图，不增加成绩或统计样本。范围起点可沿用更早记录；尚无历史均值时留空，全 DNF 日及其后休息日断线，直到再次有有效成绩。只画线，不画圆点；底部不标日期，悬停查看日期、日均值和沿用来源。${undatedText}` : records.length ? undatedText : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
       $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -183,14 +189,14 @@
     low = Math.max(0,low-padding);
     high += padding;
     const y = value => T+(high-value)/(high-low)*(H-T-B);
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按训练日期等距排列，每天使用当天全部有效 ao5 的均值，不画逐组曲线或圆点；全 DNF 日断开连线，单个或孤立日均值用短横线表示。</desc>`;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个自然日，${trainingDays} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按自然日逐天等距绘制。有训练时用当天有效 ao5 均值，无训练时沿用此前均值保持水平，仅用于图形，不计入统计。全 DNF 日断线；无可沿用的均值时留空。单个或孤立值用短横线表示。</desc>`;
     if (values.length) {
       for (let i=0;i<=4;i++) {
         const value = low+(high-low)*i/4, yy = y(value);
         svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+4}" text-anchor="end" fill="#737373" font-size="11" font-family="Consolas,monospace">${escape(C.formatScore(value))}</text>`;
       }
     } else {
-      svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">当前范围各训练日只有 DNF，没有有效日均曲线</text>`;
+      svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">${trainingDays ? '当前范围各训练日只有 DNF，没有有效日均曲线' : '当前范围没有训练记录，也没有可沿用的日均值'}</text>`;
     }
     const segments = [];
     shown.forEach((day,i) => {
@@ -203,12 +209,12 @@
       } else segments.push(`${previousValid ? 'L' : 'M'}${x(i)},${y(day.mean)}`);
     });
     if (segments.length) svg += `<path class="trend-line" d="${segments.join(' ')}" fill="none" stroke="#0070f3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    if (shown.length === 1 && shown[0].mean !== null) svg += `<text x="${x(0)}" y="${y(shown[0].mean)-12}" text-anchor="middle" fill="#0070f3">均值 ${time(shown[0].mean)}</text>`;
+    if (shown.length === 1 && shown[0].mean !== null) svg += `<text x="${x(0)}" y="${y(shown[0].mean)-12}" text-anchor="middle" fill="#0070f3">${shown[0].carried ? '沿用均值' : '均值'} ${time(shown[0].mean)}</text>`;
     // Invisible day-sized hover regions preserve details without drawing dots.
     shown.forEach((day,i) => {
-      const title = `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组`;
+      const title = day.total ? `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组` : day.carried ? `${day.date} · 无训练记录，沿用 ${day.sourceDate} 日均值 ${time(day.mean)}（仅用于画图，不计入统计）` : `${day.date} · 无训练记录，无可沿用的日均值`;
       const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
-      svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
+      svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" data-carried="${day.carried}" data-source-date="${day.sourceDate || ''}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
     // Dates remain in hover details, not crowded labels below the curve.
     $('#chart').innerHTML = svg+'</svg>';
