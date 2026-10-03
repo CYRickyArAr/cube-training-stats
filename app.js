@@ -227,18 +227,27 @@
       return;
     }
     const values = shown.filter(day => day.mean !== null).map(day => day.mean);
-    const W = 760, H = 300, L = 72, R = 25, T = 26, B = 53;
-    const x = i => shown.length === 1 ? (W+L-R)/2 : L+i*(W-L-R)/(shown.length-1);
     let low = values.length ? values.reduce((a,b) => Math.min(a,b),Infinity) : 0, high = values.length ? values.reduce((a,b) => Math.max(a,b),-Infinity) : 1;
-    const padding = Math.max((high-low)*.18,50);
+    const padding = Math.max((high-low)*.1,10);
     low = Math.max(0,low-padding);
     high += padding;
+    // Integer hundredths: start at 0.1 s and use clean 1/2/5 steps for wider
+    // ranges. Snap the axis outward, never the original means or hover values.
+    let step = 10;
+    while (Math.ceil(high/step)-Math.floor(low/step) > 7) {
+      const magnitude = 10**Math.floor(Math.log10(step));
+      step = (step/magnitude < 2 ? 2 : step/magnitude < 5 ? 5 : 10)*magnitude;
+    }
+    low = Math.floor(low/step)*step;
+    high = Math.ceil(high/step)*step;
+    const W = 760, H = 300, L = Math.max(72,(high/100).toFixed(1).length*16+12), R = 25, T = 26, B = 53;
+    const x = i => shown.length === 1 ? (W+L-R)/2 : L+i*(W-L-R)/(shown.length-1);
     const y = value => T+(high-value)/(high-low)*(H-T-B);
     let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" tabindex="0" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个自然日，${trainingDays} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按自然日逐天等距绘制。有训练时用当天有效 ao5 均值，无训练时沿用此前均值保持水平，仅用于图形，不计入统计。全 DNF 日断线；无可沿用的均值时留空。单个或孤立值用短横线表示。</desc>`;
     if (values.length) {
-      for (let i=0;i<=4;i++) {
-        const value = low+(high-low)*i/4, yy = y(value);
-        svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+4}" text-anchor="end" fill="#737373" font-size="11" font-family="Consolas,monospace">${escape(C.formatScore(value))}</text>`;
+      for (let value=low;value<=high;value+=step) {
+        const yy = y(value);
+        svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text class="trend-tick" data-value="${value}" x="${L-10}" y="${yy+4}" text-anchor="end" fill="#737373" font-size="11" font-family="Consolas,monospace">${(value/100).toFixed(1)}</text>`;
       }
     } else {
       svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">${trainingDays ? '当前范围各训练日只有 DNF，没有有效日均曲线' : '当前范围没有训练记录，也没有可沿用的日均值'}</text>`;

@@ -63,6 +63,16 @@ test('trend hides bottom date labels but keeps complete dates in hover details f
   assert.match(ui.get('chart-caption').textContent,/底部不标日期/);assert.match(ui.chart(),/class="trend-line"/);
  }
 });
+test('trend axis uses clean tenths of seconds, outward bounds and bounded nice steps without rounding means',async()=>{
+ for(const values of [[690,710],[700],[699.99,700.01],[650,820],[.01,50],[6000,6300],[600,999900]]){
+  const records=values.map((score,i)=>make(score,i+2,`2026-09-${20+i}`)),ui=boot(records);await ui.flush();
+  const ticks=[...ui.chart().matchAll(/class="trend-tick" data-value="([\d.]+)"[^>]*>([^<]+)<\/text>/g)];assert.ok(ticks.length>=2&&ticks.length<=8);const raw=ticks.map(m=>Number(m[1])),step=raw[1]-raw[0];assert.ok(raw[0]>=0&&raw[0]<=Math.min(...values));assert.ok(raw.at(-1)>=Math.max(...values));
+  ticks.forEach((m,i)=>{assert.match(m[2],/^\d+\.\d$/);assert.equal(m[2],(Number(m[1])/100).toFixed(1));assert.equal(Number(m[1])%10,0);if(i)assert.equal(raw[i]-raw[i-1],step);});
+  assert.ok([1,2,5].includes(step/10**Math.floor(Math.log10(step))));assert.doesNotMatch(ui.chart(),/NaN|Infinity/);
+  for(const value of values)assert.ok(ui.chart().includes(`data-mean="${value}"`),'source precision stays unchanged');
+  if(values[0]===690)assert.deepEqual(ticks.map(m=>m[2]),['6.8','6.9','7.0','7.1','7.2']);
+ }
+});
 test('daily trend follows date/person/range filters; distribution and personal metrics still use individual records',async()=>{
  const records=[...Array.from({length:200},(_,i)=>make(600,i+2,'2026-09-20')),...Array.from({length:130},(_,i)=>make(700,i+202)),make(500,999,null),make(800,2,'2026-09-30','p2')];
  const ui=boot(records);await ui.flush();assert.equal(count(ui),11);assert.match(ui.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(ui.get('record-count').textContent,331);
