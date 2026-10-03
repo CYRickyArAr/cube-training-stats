@@ -138,5 +138,11 @@ td.competition-leading{color:var(--blue)}
 .chart.is-distribution .distribution-svg .distribution-tick{font-size:14px;font-weight:500}
 .chart.is-distribution .distribution-svg .distribution-count{font-size:14px}
 .chart-help .legend{margin-top:6px;display:flex}
+/* Keep the line quiet; only the active date gets a marker and readable details. */
+.chart{position:relative;touch-action:pan-y}
+.trend-hover-point{fill:var(--blue);stroke:#fff;stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:none}
+.trend-tooltip{position:absolute;z-index:2;pointer-events:none;max-width:280px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--text);box-shadow:0 3px 12px #0002;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.trend-tooltip strong,.trend-tooltip span{display:block}
+.trend-tooltip strong{font-size:16px;margin-bottom:2px}
 @media(max-width:650px){.chart-card>.card-heading{padding:10px;gap:6px}.chart-switch button{padding:3px 7px}.chart-switch{gap:1px}}
 

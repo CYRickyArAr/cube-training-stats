@@ -7,6 +7,7 @@
   let snapshot = null, busy = false;
   let selected = null, view = 'personal', page = 1, chartMode = 'trend';
   let calendarOpen = false, calendarMonth = '';
+  let trendHoverIndex = -1;
   const PAGE_SIZE = 20;
   const time = value => value == null ? '—' : C.formatScore(value);
   const percentage = value => value == null ? '—' : value.toFixed(1) + '%';
@@ -160,7 +161,47 @@
     renderAnalysis(stats,C.dailyComparison(state.records,person.id,trendDate));
     renderHistory(records,stats.best);
   }
+  function hideTrendHover() {
+    const chart = $('#chart');
+    chart.querySelector?.('.trend-hover-point')?.remove();
+    const tooltip = chart.querySelector?.('.trend-tooltip');
+    if (tooltip) tooltip.hidden = true;
+    trendHoverIndex = -1;
+  }
+  function showTrendHover(hit) {
+    const chart = $('#chart'), svg = hit?.ownerSVGElement, tooltip = chart.querySelector?.('.trend-tooltip');
+    if (!svg || !tooltip || chartMode !== 'trend') return hideTrendHover();
+    if (trendHoverIndex === Number(hit.dataset.dayIndex) && !tooltip.hidden) return;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return;
+    trendHoverIndex = Number(hit.dataset.dayIndex);
+    // Retain the original native title as data, then remove it to avoid a
+    // second browser tooltip appearing on top of the immediate custom one.
+    const nativeTitle = hit.querySelector('title');
+    if (nativeTitle) { hit.dataset.tooltip = nativeTitle.textContent; nativeTitle.remove(); }
+    const [date,...details] = (hit.dataset.tooltip || '').split(' · ');
+    tooltip.innerHTML = `<strong>${escape(date)}</strong>${details.map(text => `<span>${escape(text)}</span>`).join('')}`;
+    tooltip.hidden = false;
+    let point = chart.querySelector('.trend-hover-point');
+    const hasMean = hit.dataset.mean !== '';
+    if (hasMean) {
+      if (!point) { point = document.createElementNS('http://www.w3.org/2000/svg','circle'); point.setAttribute('class','trend-hover-point'); svg.append(point); }
+      point.setAttribute('cx',hit.dataset.plotX);
+      point.setAttribute('cy',hit.dataset.plotY);
+      point.setAttribute('r',5/Math.hypot(matrix.a,matrix.b));
+    } else point?.remove();
+    const anchor = new DOMPoint(Number(hit.dataset.plotX),hasMean ? Number(hit.dataset.plotY) : 150).matrixTransform(matrix);
+    const bounds = chart.getBoundingClientRect();
+    tooltip.style.maxWidth = Math.min(280,Math.max(0,bounds.width-16))+'px';
+    const width = tooltip.offsetWidth, height = tooltip.offsetHeight;
+    const px = anchor.x-bounds.left, py = anchor.y-bounds.top;
+    let left = px+12;
+    if (left+width > bounds.width-8) left = px-width-12;
+    tooltip.style.left = Math.max(8,Math.min(left,bounds.width-width-8))+'px';
+    tooltip.style.top = Math.max(8,Math.min(py-height/2,bounds.height-height-8))+'px';
+  }
   function renderChart(records) {
+    trendHoverIndex = -1;
     const distribution = chartMode === 'distribution';
     $('#chart-title').textContent = distribution ? 'ao5 用时分布' : '日均 ao5 趋势';
     $('#trend-chart-tab').setAttribute('aria-pressed',!distribution);
@@ -176,7 +217,7 @@
     const {days:shown,undatedRecords} = C.dailyTrend(history,{startDate,endDate});
     const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
     const trainingDays = shown.filter(day => day.total).length, carriedDays = shown.filter(day => day.carried).length;
-    $('#chart-caption').textContent = shown.length ? `按自然日逐天绘制，共 ${shown.length} 天（${trainingDays} 个训练日，${carriedDays} 天沿用均值）。有训练时取当天全部有效 ao5 的平均值，DNF 不参与；无训练记录时沿用此前日均值，保持水平，只用于画图，不增加成绩或统计样本。范围起点可沿用更早记录；尚无历史均值时留空，全 DNF 日及其后休息日断线，直到再次有有效成绩。只画线，不画圆点；底部不标日期，悬停查看日期、日均值和沿用来源。${undatedText}` : records.length ? undatedText : '腾讯源表在当前范围没有训练记录。';
+    $('#chart-caption').textContent = shown.length ? `按自然日逐天绘制，共 ${shown.length} 天（${trainingDays} 个训练日，${carriedDays} 天沿用均值）。有训练时取当天全部有效 ao5 的平均值，DNF 不参与；无训练记录时沿用此前日均值，保持水平，只用于画图，不增加成绩或统计样本。范围起点可沿用更早记录；尚无历史均值时留空，全 DNF 日及其后休息日断线，直到再次有有效成绩。平时只画线，悬停时显示当前日期的圆点与详情；移开后隐藏。底部不标日期，也可用方向键查看各天、Esc 关闭。${undatedText}` : records.length ? undatedText : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
       $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -189,7 +230,7 @@
     low = Math.max(0,low-padding);
     high += padding;
     const y = value => T+(high-value)/(high-low)*(H-T-B);
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个自然日，${trainingDays} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按自然日逐天等距绘制。有训练时用当天有效 ao5 均值，无训练时沿用此前均值保持水平，仅用于图形，不计入统计。全 DNF 日断线；无可沿用的均值时留空。单个或孤立值用短横线表示。</desc>`;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" tabindex="0" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个自然日，${trainingDays} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按自然日逐天等距绘制。有训练时用当天有效 ao5 均值，无训练时沿用此前均值保持水平，仅用于图形，不计入统计。全 DNF 日断线；无可沿用的均值时留空。单个或孤立值用短横线表示。</desc>`;
     if (values.length) {
       for (let i=0;i<=4;i++) {
         const value = low+(high-low)*i/4, yy = y(value);
@@ -214,10 +255,10 @@
     shown.forEach((day,i) => {
       const title = day.total ? `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组` : day.carried ? `${day.date} · 无训练记录，沿用 ${day.sourceDate} 日均值 ${time(day.mean)}（仅用于画图，不计入统计）` : `${day.date} · 无训练记录，无可沿用的日均值`;
       const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
-      svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" data-carried="${day.carried}" data-source-date="${day.sourceDate || ''}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
+      svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" data-carried="${day.carried}" data-source-date="${day.sourceDate || ''}" data-day-index="${i}" data-plot-x="${x(i)}" data-plot-y="${day.mean === null ? '' : y(day.mean)}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
     // Dates remain in hover details, not crowded labels below the curve.
-    $('#chart').innerHTML = svg+'</svg>';
+    $('#chart').innerHTML = svg+'</svg><div class="trend-tooltip" role="tooltip" aria-live="polite" hidden></div>';
   }
   function renderDistribution(records) {
     const {bins,valid,dnf,sparse} = C.histogram(records);
@@ -450,7 +491,25 @@
   document.addEventListener('keydown',event => {
     if (calendarOpen && event.key === 'Escape') { event.preventDefault(); closeCalendar(true); }
   });
-  $('#stats-main').addEventListener('scroll',positionCalendar);
+  $('#stats-main').addEventListener('scroll',() => {positionCalendar(); hideTrendHover();});
+  for (const type of ['pointermove','pointerdown']) $('#chart').addEventListener(type,event => {
+    const hit = event.target.closest?.('.trend-hit');
+    if (hit) showTrendHover(hit);
+    else hideTrendHover();
+  });
+  $('#chart').addEventListener('pointerleave',event => {if (event.pointerType !== 'touch') hideTrendHover();});
+  $('#chart').addEventListener('pointercancel',hideTrendHover);
+  $('#chart').addEventListener('focusout',hideTrendHover);
+  $('#chart').addEventListener('keydown',event => {
+    if (event.key === 'Escape') { hideTrendHover(); return; }
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || chartMode !== 'trend') return;
+    const hits = $('#chart').querySelectorAll('.trend-hit');
+    if (!hits.length) return;
+    event.preventDefault();
+    const index = event.key === 'Home' ? 0 : event.key === 'End' ? hits.length-1 : trendHoverIndex < 0 ? (event.key === 'ArrowLeft' ? hits.length-1 : 0) : Math.max(0,Math.min(hits.length-1,trendHoverIndex+(event.key === 'ArrowLeft' ? -1 : 1)));
+    showTrendHover(hits[index]);
+  });
+  document.addEventListener('pointerdown',event => {if (!event.target.closest?.('#chart')) hideTrendHover();});
   for (const [id,mode] of [['trend-chart-tab','trend'],['histogram-chart-tab','distribution']]) {
     $('#'+id).addEventListener('click',() => {
       chartMode = mode;
@@ -469,6 +528,7 @@
   $('#auto-sync').addEventListener('change',autoRead);
   document.addEventListener('visibilitychange',autoRead);
   window.addEventListener?.('resize',() => {
+    hideTrendHover();
     positionCalendar();
     if (chartMode === 'distribution' && view === 'personal' && selected) renderChart(recordsFor(selected));
   });
