@@ -50,7 +50,7 @@ test('single, equal, all-DNF, undated and empty daily samples render honestly',a
 });
 test('a no-training selected date may display a carried mean, but metrics, history, streak and distribution remain empty',async()=>{
  const ui=boot([make(600,2,'2026-09-20')]);await ui.flush();assert.equal(count(ui),11);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,10);
- ui.range('day','2026-09-24');assert.equal(count(ui),1);assert.match(ui.chart(),/无训练记录，沿用 2026-09-20 日均值 6.00/);assert.match(ui.chart(),/沿用均值 6.00/);assert.equal(ui.get('metric-mean').textContent,'—');assert.equal(ui.get('metric-sub7').textContent,'—');assert.equal(ui.get('record-count').textContent,0);assert.match(ui.get('analysis').innerHTML,/id="analysis-sub7-streak">—/);
+ ui.range('day','2026-09-24');assert.equal(count(ui),1);assert.match(ui.chart(),/<title>2026-09-24 · 平均 ao5 6.00<\/title>/);assert.doesNotMatch(ui.chart(),/沿用均值 6.00|无训练记录，沿用/);assert.match(ui.chart(),/均值 6.00/);assert.equal(ui.get('metric-mean').textContent,'—');assert.equal(ui.get('metric-sub7').textContent,'—');assert.equal(ui.get('record-count').textContent,0);assert.match(ui.get('analysis').innerHTML,/id="analysis-sub7-streak">—/);
  ui.get('histogram-chart-tab').dispatch('click');assert.match(ui.chart(),/没有训练记录/);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),1);
  ui.person('p2');assert.doesNotMatch(ui.chart(),/class="trend-line"/);assert.match(ui.chart(),/没有可沿用的日均值/);
  ui.person('p1');ui.range('7');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,7);assert.equal(ui.get('record-count').textContent,0);assert.equal(ui.get('metric-mean').textContent,'—');

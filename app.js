@@ -250,10 +250,10 @@
       } else segments.push(`${previousValid ? 'L' : 'M'}${x(i)},${y(day.mean)}`);
     });
     if (segments.length) svg += `<path class="trend-line" d="${segments.join(' ')}" fill="none" stroke="#0070f3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    if (shown.length === 1 && shown[0].mean !== null) svg += `<text x="${x(0)}" y="${y(shown[0].mean)-12}" text-anchor="middle" fill="#0070f3">${shown[0].carried ? '沿用均值' : '均值'} ${time(shown[0].mean)}</text>`;
+    if (shown.length === 1 && shown[0].mean !== null) svg += `<text x="${x(0)}" y="${y(shown[0].mean)-12}" text-anchor="middle" fill="#0070f3">均值 ${time(shown[0].mean)}</text>`;
     // Invisible day-sized hover regions preserve details without drawing dots.
     shown.forEach((day,i) => {
-      const title = day.total ? `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组` : day.carried ? `${day.date} · 无训练记录，沿用 ${day.sourceDate} 日均值 ${time(day.mean)}` : `${day.date} · 无训练记录，无可沿用的日均值`;
+      const title = day.total ? `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组` : `${day.date} · 平均 ao5 ${time(day.mean)}`;
       const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
       svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" data-carried="${day.carried}" data-source-date="${day.sourceDate || ''}" data-day-index="${i}" data-plot-x="${x(i)}" data-plot-y="${day.mean === null ? '' : y(day.mean)}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
