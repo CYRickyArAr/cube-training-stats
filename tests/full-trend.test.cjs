@@ -38,6 +38,14 @@ test('single, equal, all-DNF, undated and empty daily samples render honestly',a
  }
  const unknown=boot([make(600,2,null)]);await unknown.flush();assert.equal(count(unknown),0);assert.match(unknown.chart(),/没有可用训练日期/);assert.match(unknown.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(unknown.get('metric-mean').textContent,'6.00','undated score remains in all-range metrics');
 });
+test('trend hides bottom date labels but keeps complete dates in hover details for single and multiple days',async()=>{
+ for(const records of [[make(600,2)],[make(600,2,'2026-09-20'),make(700,3)]]){
+  const ui=boot(records);await ui.flush();assert.doesNotMatch(ui.chart(),/class="trend-date"/);
+  const visible=[...ui.chart().matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m=>m[1]).join(' ');assert.doesNotMatch(visible,/\d{4}-\d{2}-\d{2}/);
+  for(const r of records)assert.ok(ui.chart().includes(`<title>${r.date} · 平均 ao5`));
+  assert.match(ui.get('chart-caption').textContent,/底部不标日期/);assert.match(ui.chart(),/class="trend-line"/);
+ }
+});
 test('daily trend follows date/person/range filters; distribution and personal metrics still use individual records',async()=>{
  const records=[...Array.from({length:200},(_,i)=>make(600,i+2,'2026-09-20')),...Array.from({length:130},(_,i)=>make(700,i+202)),make(500,999,null),make(800,2,'2026-09-30','p2')];
  const ui=boot(records);await ui.flush();assert.equal(count(ui),2);assert.match(ui.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(ui.get('record-count').textContent,331);

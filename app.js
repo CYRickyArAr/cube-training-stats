@@ -170,7 +170,7 @@
     if (distribution) { renderDistribution(records); return; }
     const {days:shown,undatedRecords} = C.dailyTrend(records);
     const undatedText = undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
-    $('#chart-caption').textContent = records.length ? `当前范围按 ${shown.length} 个训练日汇总，每天取当天全部有效 ao5 的平均值，DNF 不参与均值。按训练日期等距排列，无训练的日期不补值；全 DNF 日断开连线。只画线，不画圆点；单个或孤立日均值用短横线表示。悬停查看日期、日均值及有效 / DNF 组数。${undatedText}` : '腾讯源表在当前范围没有训练记录。';
+    $('#chart-caption').textContent = records.length ? `当前范围按 ${shown.length} 个训练日汇总，每天取当天全部有效 ao5 的平均值，DNF 不参与均值。按训练日期等距排列，无训练的日期不补值；全 DNF 日断开连线。只画线，不画圆点；单个或孤立日均值用短横线表示。底部不标日期，悬停查看日期、日均值及有效 / DNF 组数。${undatedText}` : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
       $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -210,11 +210,7 @@
       const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
       svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
-    const tickCount = Math.min(shown.length,Math.max(2,Math.min(6,Math.floor(($('#chart').clientWidth || W)/110))));
-    const ticks = tickCount === 1 ? [0] : Array.from({length:tickCount},(_,i) => Math.round(i*(shown.length-1)/(tickCount-1)));
-    ticks.forEach(i => {
-      svg += `<text class="trend-date" x="${x(i)}" y="${H-13}" text-anchor="${shown.length === 1 ? 'middle' : i === 0 ? 'start' : i === shown.length-1 ? 'end' : 'middle'}" fill="#737373" font-size="11">${escape(shown[i].date)}</text>`;
-    });
+    // Dates remain in hover details, not crowded labels below the curve.
     $('#chart').innerHTML = svg+'</svg>';
   }
   function renderDistribution(records) {
