@@ -36,14 +36,19 @@ function boot(initial=records){
 }
 test('all ranges show latest training-day means; selecting dates steps backward; other statistics remain range-filtered',async()=>{
  const ui=boot();await ui.flush();
- for(const range of ['0','7','30','90','day']){ui.range(range);assert.match(ui.text(),/均值提升 20.0%/);assert.match(ui.text(),/2026-10-01 9.00 → 2026-10-02 7.20/);assert.doesNotMatch(ui.text(),/40 组|此前 20|最近 20/);}
+ for(const range of ['0','7','30','90','day']){ui.range(range);assert.match(ui.text(),/比上次快 1.80 秒/);assert.match(ui.text(),/2026-10-01 9.00 → 2026-10-02 7.20/);assert.doesNotMatch(ui.text(),/40 组|此前 20|最近 20/);}
  assert.equal(ui.get('metric-mean').textContent,'7.20');assert.equal(ui.get('record-count').textContent,22);assert.match(ui.text(),/上次 2026-10-01：15 组有效；本次 2026-10-02：20 组有效/);
- ui.range('day','2026-10-01');assert.match(ui.text(),/2026-09-30 11.00 → 2026-10-01 9.00/);assert.match(ui.text(),/均值提升 18.2%/);assert.equal(ui.get('record-count').textContent,15);
- ui.range('day','2026-10-02');ui.person('p2');assert.match(ui.text(),/2026-09-29 6.00 → 2026-10-02 9.00/);assert.match(ui.text(),/均值变慢 50.0%/);assert.equal(ui.get('record-count').textContent,1);
- ui.person('p1');ui.update([...day(Array(15).fill(900),'2026-10-01'),make(900,2)]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('range-date').value,'2026-10-02');assert.match(ui.text(),/日均水平基本持平/);
+ ui.range('day','2026-10-01');assert.match(ui.text(),/2026-09-30 11.00 → 2026-10-01 9.00/);assert.match(ui.text(),/比上次快 2.00 秒/);assert.equal(ui.get('record-count').textContent,15);
+ ui.range('day','2026-10-02');ui.person('p2');assert.match(ui.text(),/2026-09-29 6.00 → 2026-10-02 9.00/);assert.match(ui.text(),/比上次慢 3.00 秒/);assert.equal(ui.get('record-count').textContent,1);
+ ui.person('p1');ui.update([...day(Array(15).fill(900),'2026-10-01'),make(900,2)]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('range-date').value,'2026-10-02');assert.match(ui.text(),/与上次基本持平/);
+});
+test('daily change displays seconds from raw means, never percentages or a misleading zero-second improvement',async()=>{
+ for(const [previous,current,expected] of [[729,698,'比上次快 0.31 秒'],[700,720,'比上次慢 0.20 秒'],[700.49,699.51,'比上次快 0.01 秒'],[700.1,699.9,'与上次基本持平'],[700,700.1,'与上次基本持平'],[700,700,'与上次基本持平'],[10000,700,'比上次快 93.00 秒']]){
+  const ui=boot([make(previous,2,'2026-10-01'),make(current,2)]);await ui.flush();const title=ui.text().match(/id="analysis-trend"[^>]*>([^<]*)/)[1];assert.equal(title,expected);assert.doesNotMatch(title,/%|提升|变慢/);
+ }
 });
 test('date baseline may be outside preset range without importing its records into other metrics',async()=>{
- const ui=boot([make(1000,2,'2026-09-01'),make(600,2)]);await ui.flush();ui.range('7');assert.match(ui.text(),/2026-09-01 10.00 → 2026-10-02 6.00/);assert.match(ui.text(),/均值提升 40.0%/);assert.equal(ui.get('metric-mean').textContent,'6.00');assert.equal(ui.get('record-count').textContent,1);
+ const ui=boot([make(1000,2,'2026-09-01'),make(600,2)]);await ui.flush();ui.range('7');assert.match(ui.text(),/2026-09-01 10.00 → 2026-10-02 6.00/);assert.match(ui.text(),/比上次快 4.00 秒/);assert.equal(ui.get('metric-mean').textContent,'6.00');assert.equal(ui.get('record-count').textContent,1);
 });
 test('day comparison explains no date, no records, earliest date and all-DNF cases without a 40-group requirement',async()=>{
  const ui=boot([make(600,2),make(null,2,'2026-10-01'),make(800,2,'2026-09-30')]);await ui.flush();assert.match(ui.text(),/上次 2026-10-01 只有 DNF/);

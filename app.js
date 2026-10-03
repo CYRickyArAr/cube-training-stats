@@ -245,7 +245,7 @@
     $('#chart').innerHTML = svg+'</svg>';
   }
   function renderAnalysis(stats, change) {
-    const {current,previous,improvement} = change;
+    const {current,previous} = change;
     let trendTitle = '暂无可比较的日均值', trendText, trendClass = '';
     if (!current.date) trendText = $('#range').value === 'day' ? '请选择训练日期。' : '当前范围没有标注日期的训练记录。';
     else if (!current.total) trendText = `${current.date} 没有训练记录。`;
@@ -253,10 +253,11 @@
     else if (!previous) trendText = `${current.date} 均值 ${time(current.mean)}；此前没有训练记录。`;
     else if (!previous.valid) trendText = `上次 ${previous.date} 只有 DNF，无法比较均值。`;
     else {
-      const amount = Math.abs(improvement), equal = amount < .05;
-      trendTitle = equal ? '日均水平基本持平' : `均值${improvement > 0 ? '提升' : '变慢'} ${amount.toFixed(1)}%`;
+      const difference = previous.mean-current.mean;
+      const seconds = (Math.round(Math.abs(difference))/100).toFixed(2), equal = seconds === '0.00';
+      trendTitle = equal ? '与上次基本持平' : `比上次${difference > 0 ? '快' : '慢'} ${seconds} 秒`;
       trendText = `${previous.date} ${time(previous.mean)} → ${current.date} ${time(current.mean)}`;
-      trendClass = equal ? '' : improvement > 0 ? 'good' : 'bad';
+      trendClass = equal ? '' : difference > 0 ? 'good' : 'bad';
     }
     const trendDetail = previous ? `上次 ${previous.date}：${previous.valid} 组有效；本次 ${current.date}：${current.valid} 组有效。各天全部有效 ao5 的均值，DNF 不参与。` : '按各训练日全部有效 ao5 比较，不要求固定组数。';
     const stabilityTitle = stats.valid >= 2 ? `波动系数 ${percentage(stats.cv)}` : '暂不能判断稳定性';
