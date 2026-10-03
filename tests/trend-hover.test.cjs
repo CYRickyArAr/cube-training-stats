@@ -2,7 +2,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const path=require('node:path');const root=path.join(__dirname,'..');
 test('trend hover is opt-in: no permanently rendered dots, nearest-x hit regions and safe tooltip text',()=>{
  const app=fs.readFileSync(path.join(root,'app.js'),'utf8'),css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
- assert.match(app,/data-plot-x=/);assert.match(app,/createElementNS\('http:\/\/www.w3.org\/2000\/svg','circle'\)/);assert.match(app,/trend-tooltip.*role="tooltip"/);assert.match(app,/details\.map\(text => .*escape\(text\)/);assert.match(css,/\.trend-hover-point\{[^}]*pointer-events:none/);assert.match(css,/\.trend-tooltip\{[^}]*pointer-events:none/);
+ assert.doesNotMatch(app,/（仅用于画图，不计入统计）/);assert.match(app,/data-plot-x=/);assert.match(app,/createElementNS\('http:\/\/www.w3.org\/2000\/svg','circle'\)/);assert.match(app,/trend-tooltip.*role="tooltip"/);assert.match(app,/details\.map\(text => .*escape\(text\)/);assert.match(css,/\.trend-hover-point\{[^}]*pointer-events:none/);assert.match(css,/\.trend-tooltip\{[^}]*pointer-events:none/);
 });
 test('browser hover shows exactly one anchored dot and tooltip, handles gaps, touch, keyboard and layout changes',
  {skip:process.env.CUBE_UI_TEST!=='1',timeout:60000},async()=>{
