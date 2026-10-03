@@ -87,6 +87,19 @@ td.competition-leading{color:var(--blue)}
 .competition-help summary{cursor:pointer}
 .competition-help p{margin-top:6px;max-width:80ch;line-height:1.8}
 
+/* One shared denominator, three nested thresholds; retain the comparison palette. */
+.fun-card{margin-top:20px}
+.fun-card>.card-heading{flex-wrap:wrap}
+.fun-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));padding:0 14px 16px;gap:16px}
+.fun-metric{min-width:0}
+.fun-metric+.fun-metric{border-left:1px solid var(--line);padding-left:16px}
+.fun-metric>span{display:block;font-size:16px;color:var(--muted)}
+.fun-metric>strong{display:block;font-size:32px;line-height:1.4;font-weight:600;font-variant-numeric:tabular-nums;color:var(--blue);margin:5px 0}
+.fun-metric>small{display:block;font-size:14px;color:var(--muted)}
+.fun-summary{padding:0 14px 12px;font-size:14px;color:var(--muted)}
+.fun-card>.competition-help{margin:0;padding:0 14px 14px}
+@media(max-width:650px){.fun-metrics{grid-template-columns:1fr;gap:12px}.fun-metric+.fun-metric{border-left:0;border-top:1px solid var(--line);padding:12px 0 0}.fun-metric{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:12px}.fun-metric>strong{grid-column:2;grid-row:1 / 3;margin:0}.fun-metric>small{grid-column:1}}
+
 /* Stable view controls: identity width never changes the tab anchor. */
 .page-heading{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);grid-template-rows:68px;gap:16px;align-items:center}
 .page-heading>.person-heading,.page-heading>#view-title{grid-column:1;grid-row:1;min-width:0;max-width:100%;margin:0}

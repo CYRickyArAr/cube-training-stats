@@ -330,7 +330,14 @@
   }
   function renderComparison() {
     const rows = state.people.map(person => { const records = recordsFor(person.id); return {person,records,stats:analyze(records)}; });
-    const match = C.competition(state.people,rows.flatMap(row => row.records));
+    const records = rows.flatMap(row => row.records);
+    const match = C.competition(state.people,records);
+    const together = C.simultaneousSub7(state.people,records);
+    for (const threshold of [3,2,1]) {
+      $(`#fun-sub7-${threshold}`).textContent = percentage(together.rates[threshold]);
+      $(`#fun-sub7-${threshold}-count`).textContent = together.rounds ? `${together.counts[threshold]} / ${together.rounds} 局` : '暂无样本';
+    }
+    $('#fun-summary').textContent = together.participants !== 3 ? '需要源表恰好有三名人员，才能统计三人同轮表现。' : `${together.rounds ? `基于 ${together.rounds} 局三人完整记录` : '当前范围暂无三人都有成绩的完整轮次'}${together.skippedRounds ? ` · 不完整或异常跳过 ${together.skippedRounds} 局` : ''}${together.unmatchedRecords ? ` · ${together.unmatchedRecords} 条无源行号，未统计` : ''}`;
     const highest = Math.max(0,...Object.values(match.points));
     const counts = match.participantCounts;
     const attendance = !counts.length ? '当天至少 2 人有成绩才能计比赛分' : counts.length === 1 ? `${counts[0]} 人比赛` : `按日 ${counts[0]}–${counts.at(-1)} 人比赛`;

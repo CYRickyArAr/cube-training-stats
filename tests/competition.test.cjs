@@ -95,6 +95,23 @@ test('all-range comparison sums attendance per day and displays non-competitors 
  ui.get('range-date').value='2026-09-23';ui.get('range-date').dispatch('change');assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'2'});assert.match(ui.get('competition-summary').textContent,/3 人比赛 · 计分 1 局/);
  ui.update({records:[...round([600,700],2,'2026-09-22'),record('c',500,3,'2026-09-23')]});ui.get('range').value='0';ui.get('range').dispatch('change');ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'1',b:'0',c:'—'},'solo training is not a zero-point competition');
 });
+const funRates=ui=>[3,2,1].map(n=>ui.get(`fun-sub7-${n}`).textContent);
+test('fun statistics use a shared three-person denominator across filters, person switches and refresh',async()=>{
+ const ui=boot();await ui.flush();
+ const records=[...round([600,650,699.99],2),...round([600,650,700],3),...round([600,700,null],4),...round([null,null,null],5),...round([600,600,600],2,'2026-09-30'),...round([600,600,600],2,null),...round([600,600,600],2,'2026-01-01'),...round([600,600],2,'2026-09-28')];
+ ui.update({records});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(funRates(ui),['57.1%','71.4%','85.7%']);assert.equal(ui.get('fun-sub7-3-count').textContent,'4 / 7 局');assert.match(ui.get('fun-summary').textContent,/7 局三人完整记录/);
+ for(const range of ['7','30','90']){ui.get('range').value=range;ui.get('range').dispatch('change');assert.deepEqual(funRates(ui),['40.0%','60.0%','80.0%']);}
+ ui.get('range').value='day';ui.get('range').dispatch('change');ui.get('range-date').value='2026-09-29';ui.get('range-date').dispatch('change');assert.deepEqual(funRates(ui),['25.0%','50.0%','75.0%']);
+ const before=ui.get('metric-mean').textContent;ui.get('comparison-tab').dispatch('click');assert.equal(ui.get('metric-mean').textContent,before);
+ ui.select('b');assert.deepEqual(funRates(ui),['25.0%','50.0%','75.0%']);ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(funRates(ui),['25.0%','50.0%','75.0%']);assert.equal(ui.get('range-date').value,'2026-09-29');
+ ui.get('range-date').value='2026-09-28';ui.get('range-date').dispatch('change');assert.deepEqual(funRates(ui),['—','—','—']);assert.match(ui.get('fun-summary').textContent,/暂无三人都有成绩/);assert.match(ui.get('competition-summary').textContent,/2 人比赛 · 计分 1 局/);
+ ui.get('range-date').value='2026-09-27';ui.get('range-date').dispatch('change');assert.deepEqual(funRates(ui),['—','—','—']);assert.equal(ui.get('fun-sub7-1-count').textContent,'暂无样本');
+});
+test('fun statistics recompute after source changes, distinguish real zeroes, and explain non-three-person rosters',async()=>{
+ const ui=boot();await ui.flush();ui.update({records:round([null,null,null],2)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(funRates(ui),['0.0%','0.0%','0.0%']);assert.equal(ui.get('fun-sub7-1-count').textContent,'0 / 1 局');
+ ui.update({records:round([600,600,600],2)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(funRates(ui),['100.0%','100.0%','100.0%']);
+ for(const n of [2,4,0]){ui.update({people:people(n),records:round([600,600,600],2).filter(r=>people(n).some(p=>p.id===r.personId))});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(funRates(ui),['—','—','—']);assert.match(ui.get('fun-summary').textContent,/需要源表恰好有三名人员/);}
+});
 function displayedOrder(ui){return [...ui.get('comparison-body').innerHTML.matchAll(/data-competition-person="([^"]+)"/g)].map(m=>m[1]);}
 test('comparison sorts higher match points before faster mean and recomputes ordering for refresh and date filters',async()=>{
  const ui=boot();await ui.flush();const records=[...round([600,500],2),...round([600,500],3),...round([600,1000],4)];ui.update({records});ui.get('refresh-data').dispatch('click');await ui.flush();

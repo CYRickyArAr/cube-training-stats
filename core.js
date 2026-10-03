@@ -146,6 +146,33 @@
     }
     return result;
   }
+  // Empirical, nested rates for the SAME three people in complete source rounds.
+  // Unlike competition points, a two-person day cannot contribute any samples.
+  function simultaneousSub7(people, records) {
+    const ids = new Set(people.map(person => person.id));
+    const result = {participants:ids.size,rounds:0,skippedRounds:0,unmatchedRecords:0,counts:{1:0,2:0,3:0},rates:{1:null,2:null,3:null}};
+    if (ids.size !== 3) return result;
+    const rounds = new Map();
+    for (const record of records) {
+      if (!ids.has(record.personId)) continue;
+      if (!Number.isInteger(record.sourceRow) || record.sourceRow < 2) { result.unmatchedRecords++; continue; }
+      const date = record.date || (record.at ? record.at.slice(0,10) : '');
+      // As with match points, undated same-row records match only in all-range.
+      const key = JSON.stringify([date,record.sourceRow]);
+      if (!rounds.has(key)) rounds.set(key,{scores:new Map(),invalid:false});
+      const round = rounds.get(key);
+      if (round.scores.has(record.personId) || (record.score !== null && (!Number.isFinite(record.score) || record.score <= 0))) round.invalid = true;
+      round.scores.set(record.personId,record.score);
+    }
+    for (const round of rounds.values()) {
+      if (round.invalid || round.scores.size !== 3) { result.skippedRounds++; continue; }
+      result.rounds++;
+      const sub7 = [...round.scores.values()].filter(score => score !== null && score < 700).length;
+      for (const threshold of [1,2,3]) if (sub7 >= threshold) result.counts[threshold]++;
+    }
+    for (const threshold of [1,2,3]) result.rates[threshold] = result.rounds ? result.counts[threshold]/result.rounds*100 : null;
+    return result;
+  }
   function personFields(state, name, targetInput, id) {
     name = String(name).trim();
     if (!name || name.length > 40) throw new Error('姓名需要 1–40 个字符。');
@@ -235,7 +262,7 @@
     }
     return '\ufeff' + rows.map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = {parseScore, formatScore, analyze, dailyTrend, dailyComparison, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
+  const api = {parseScore, formatScore, analyze, dailyTrend, dailyComparison, histogram, competition, simultaneousSub7, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CubeStats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
