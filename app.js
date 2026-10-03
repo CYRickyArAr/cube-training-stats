@@ -284,13 +284,32 @@
     // into as many rows as needed rather than hiding ticks or adding x-scroll.
     const W = Math.max(160,($('#chart').clientWidth || 760)-16);
     const labelWidth = bins.reduce((max,bin) => Math.max(max,bin.start.toFixed(1).length),0)*8+12;
-    const L = 48, R = Math.max(16,Math.ceil(labelWidth/2)), T = 32;
+    const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
+    const L = 48, R = Math.max(16,Math.ceil(labelWidth/2),Math.ceil(String(peak).length*9/2+4));
     const slot = (W-L-R)/bins.length;
     const tickRows = Math.min(bins.length,Math.max(1,Math.ceil(labelWidth/slot)));
-    const B = 22+tickRows*20, H = Math.max(218,T+90+B);
-    const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
-    const plotHeight = H-T-B, barWidth = Math.min(40,slot*.75);
-    const x = i => L+slot*(i+.5), y = count => H-B-count/top*plotHeight;
+    const B = 22+tickRows*20, baseT = 32, baseH = Math.max(218,baseT+90+B);
+    const plotHeight = baseH-baseT-B, barWidth = Math.min(40,slot*.75);
+    const x = i => L+slot*(i+.5), baseY = count => baseH-B-count/top*plotHeight;
+    // Keep every nonzero count. Lift crowded labels above neighboring bars and
+    // earlier labels, then add headroom instead of hiding or shrinking numbers.
+    const countLabels = [];
+    bins.forEach((bin,i) => {
+      if (!bin.count) return;
+      const xx = x(i), width = String(bin.count).length*9;
+      let yy = baseY(bin.count)-7;
+      bins.forEach((other,j) => {
+        if (other.count && Math.abs(xx-x(j)) < (width+barWidth)/2+2) yy = Math.min(yy,baseY(other.count)-7);
+      });
+      while (true) {
+        const conflict = countLabels.find(label => Math.abs(xx-label.x) < (width+label.width)/2+4 && Math.abs(yy-label.y) < 20);
+        if (!conflict) break;
+        yy = conflict.y-20;
+      }
+      countLabels.push({bin,x:xx,y:yy,width});
+    });
+    const headroom = Math.max(0,Math.ceil(44-Math.min(...countLabels.map(label => label.y))));
+    const T = baseT+headroom, H = baseH+headroom, y = count => baseY(count)+headroom;
     let svg = `<svg class="distribution-svg" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
     for (let i=0;i<=4;i++) {
       const count = i*step, yy = y(count);
@@ -300,13 +319,21 @@
     bins.forEach((bin,i) => {
       const title = `${bin.label} 秒（${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
       svg += `<g><title>${escape(title)}</title><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="4" fill="#0070f3"/>`;
-      if (bin.count && slot >= String(bin.count).length*8+4) svg += `<text class="distribution-count" x="${x(i)}" y="${y(bin.count)-7}" text-anchor="middle" fill="#171717">${bin.count}</text>`;
       // A full-column hover target also exposes zero-count bins.
       svg += `<rect x="${L+i*slot}" y="${T}" width="${slot}" height="${plotHeight}" fill="transparent"/></g>`;
       if (sparse && i && bin.index-bins[i-1].index > 1) svg += `<text x="${L+i*slot}" y="${H-B-4}" text-anchor="middle" fill="#737373"><title>省略 ${(bin.index-bins[i-1].index-1)} 个无记录区间</title>⋯</text>`;
       const tickY = H-B+20+(i%tickRows)*20;
       svg += `<line x1="${x(i)}" y1="${H-B}" x2="${x(i)}" y2="${tickY-13}" stroke="#e5e5e5"/><text class="distribution-tick" data-tick="${bin.index}" data-tick-row="${i%tickRows}" x="${x(i)}" y="${tickY}" text-anchor="middle" fill="#525252"><title>${escape(bin.label)} 秒</title><tspan>${bin.start.toFixed(1)}</tspan></text>`;
     });
+    // Guides go below all labels; neither later bars nor guides cover numbers.
+    for (const label of countLabels) {
+      const yy = label.y+headroom;
+      if (yy < y(label.bin.count)-7) svg += `<line class="distribution-count-guide" x1="${label.x}" y1="${y(label.bin.count)-2}" x2="${label.x}" y2="${yy+3}" stroke="#b0b0b0"/>`;
+    }
+    for (const label of countLabels) {
+      const yy = label.y+headroom, {bin} = label;
+      svg += `<g><title>${escape(bin.label)} 秒 · ${bin.count} 组</title><text class="distribution-count" data-count-bin="${bin.index}" x="${label.x}" y="${yy}" text-anchor="middle" fill="#171717" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${bin.count}</text></g>`;
+    }
     $('#chart').innerHTML = svg+'</svg>';
   }
   function renderAnalysis(stats, change) {

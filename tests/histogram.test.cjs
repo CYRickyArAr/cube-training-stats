@@ -21,4 +21,34 @@ test('complete histogram fits desktop and mobile widths with every tick visible 
  }
  const css=fs.readFileSync(path.join(root,'styles.css'),'utf8');assert.match(css,/\.chart\.is-distribution\{[^}]*overflow:hidden/);assert.match(css,/\.distribution-tick\{font-size:14px/);
 });
+test('all nonempty bins keep their count labels, shifting collisions above bars and reserving header space',async()=>{
+ const ui=boot();await ui.flush();ui.get('histogram-chart-tab').dispatch('click');
+ for(const width of [320,600,1200])for(const counts of [[125],Array.from({length:34},(_,i)=>i%7===0?0:i%3===0?17:13),Array.from({length:160},()=>1),[1,120,2,99,12,9,100,1]]){
+  ui.get('chart').clientWidth=width;let id=0;const records=counts.flatMap((count,i)=>Array.from({length:count},()=>({id:'count'+(++id),personId:'p1',score:600+i*10,date:'2026-09-21',sourceRow:id+2,note:''})));
+  ui.replace(records);ui.get('refresh-data').dispatch('click');await ui.flush();const svg=ui.get('chart').innerHTML,bins=C.histogram(records).bins;
+  const labels=[...svg.matchAll(/<text class="distribution-count" data-count-bin="(\d+)" x="([\d.]+)" y="([\d.]+)"[^>]*>(\d+)<\/text>/g)].map(m=>({bin:Number(m[1]),x:Number(m[2]),y:Number(m[3]),count:Number(m[4]),width:m[4].length*9}));
+  assert.equal(labels.length,bins.filter(b=>b.count).length,'every nonempty bar has a label');assert.equal(labels.reduce((sum,l)=>sum+l.count,0),records.length);
+  const bars=[...svg.matchAll(/<rect data-bin="(\d+)" data-count="(\d+)" x="([\d.]+)" y="([\d.]+)" width="([\d.]+)"/g)].map(m=>({bin:Number(m[1]),count:Number(m[2]),x:Number(m[3]),y:Number(m[4]),width:Number(m[5])}));
+  for(const [i,l] of labels.entries()){
+   const bar=bars.find(b=>b.bin===l.bin);assert.equal(l.count,bar.count);assert.ok(Math.abs(l.x-(bar.x+bar.width/2))<1e-8);assert.ok(l.y-14>=24,'does not overlap summary');assert.ok(l.x-l.width/2>=0&&l.x+l.width/2<=width-16,'no clipping');
+   for(const other of labels.slice(0,i))assert.ok(Math.abs(l.x-other.x)>=(l.width+other.width)/2+4-1e-8||Math.abs(l.y-other.y)>=20,'count labels do not overlap');
+   for(const b of bars)if(b.count&&l.x+l.width/2>b.x&&l.x-l.width/2<b.x+b.width)assert.ok(l.y<=b.y-7+1e-8,'labels stay above overlapping bars');
+  }
+ }
+});
+test('browser: every distribution count remains visible without overlaps after desktop/mobile resizing', {skip:process.env.CUBE_UI_TEST!=='1',timeout:45000},async()=>{
+ const {TencentReader}=require('../tencent-reader.cjs');const browser=new TencentReader();
+ try{
+  await browser.start();const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link rel="stylesheet"[^>]*>/,()=>'<style>'+fs.readFileSync(path.join(root,'styles.css'),'utf8')+'</style>');const frame=(await browser.cdp('Page.getFrameTree')).frameTree.frame.id;await browser.cdp('Page.setDocumentContent',{frameId:frame,html});
+  let id=0;const records=Array.from({length:34},(_,i)=>Array.from({length:i%7===0?0:i%3===0?17:13},()=>({id:'count'+(++id),personId:'p1',score:600+i*10,date:'2026-09-21',sourceRow:id+2,note:''}))).flat();
+  const payload={data:{version:1,people:[{id:'p1',name:'Test only'}],records,warnings:[]},lastSuccessAt:new Date().toISOString(),stale:false,error:null};await browser.evaluate(fs.readFileSync(path.join(root,'core.js'),'utf8'));await browser.evaluate(`window.fetch=async()=>({ok:true,status:200,json:async()=>(${JSON.stringify(payload)})})`);await browser.evaluate(fs.readFileSync(path.join(root,'app.js'),'utf8'));await browser.evaluate(`new Promise(r=>setTimeout(r,30))`);await browser.evaluate(`document.querySelector('#histogram-chart-tab').click()`);
+  for(const width of [1366,768,390,320]){
+   await browser.cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<650});await browser.evaluate(`new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
+   const layout=await browser.evaluate(`(()=>{const svg=document.querySelector('.distribution-svg'),rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}},bars=[...svg.querySelectorAll('rect[data-bin]')].filter(e=>Number(e.dataset.count)>0);return {svg:rect(svg),overflow:document.documentElement.scrollWidth>innerWidth,bars:bars.map(e=>({...rect(e),count:Number(e.dataset.count)})),labels:[...svg.querySelectorAll('.distribution-count')].map(e=>({...rect(e),count:Number(e.textContent)})),summary:rect(svg.querySelector('text'))}})()`);
+   assert.equal(layout.overflow,false);assert.equal(layout.labels.length,layout.bars.length);assert.equal(layout.labels.reduce((s,l)=>s+l.count,0),records.length);
+   const overlaps=(a,b)=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top;
+   for(const [i,l] of layout.labels.entries()){assert.ok(l.left>=layout.svg.left&&l.right<=layout.svg.right&&l.top>=layout.svg.top&&l.bottom<=layout.svg.bottom,width+'px label fits');assert.ok(!overlaps(l,layout.summary));for(const other of layout.labels.slice(0,i))assert.ok(!overlaps(l,other),width+'px no overlapping counts');for(const bar of layout.bars)assert.ok(!overlaps(l,bar),width+'px counts are not hidden inside bars');}
+  }
+ }finally{await browser.close();}
+});
 test('trend/distribution switch reuses one chart, counts all filtered records and preserves mode across people/refresh',async()=>{const ui=boot();await ui.flush();assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],'true');ui.get('histogram-chart-tab').dispatch('click');assert.equal(ui.get('chart-title').textContent,'ao5 用时分布');assert.equal(ui.get('histogram-chart-tab').attrs['aria-pressed'],'true');assert.equal(binCount(ui),126,'histogram counts all valid records in the selected range');assert.match(ui.get('chart').innerHTML,/6\.00–6\.09/);assert.match(ui.get('chart').innerHTML,/DNF 1 组/);ui.get('range').value='day';ui.get('range').dispatch('change');assert.equal(binCount(ui),125,'specific day filters the histogram');ui.person('p2');assert.equal(binCount(ui),1);assert.match(ui.get('chart').innerHTML,/7\.10–7\.19/);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('histogram-chart-tab').attrs['aria-pressed'],'true');ui.get('trend-chart-tab').dispatch('click');assert.equal(ui.get('chart-title').textContent,'日均 ao5 趋势');assert.match(ui.get('chart').innerHTML,/class="trend-line"/);assert.doesNotMatch(ui.get('chart').innerHTML,/<circle/);ui.get('histogram-chart-tab').dispatch('click');ui.replace([{id:'dnf',personId:'p2',score:null,date:'2026-09-21',at:'2026-09-21T00:00:00Z',sourceRow:2,note:''}]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.match(ui.get('chart').innerHTML,/只有 DNF/);assert.equal(binCount(ui),0);});
