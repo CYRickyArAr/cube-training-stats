@@ -44,6 +44,21 @@ test('invalid saved preferences and blocked session storage do not prevent fresh
  for(const value of ['{broken',JSON.stringify({range:'invalid',date:''}),JSON.stringify({range:'day',date:'2026-02-30'}),JSON.stringify({range:'day',date:'2026-9-21'}),JSON.stringify({range:'day',date:123})]){const storage=new Map([['cube-stats-filter-v1',value]]),ui=boot(storage);await ui.flush();assert.equal(ui.get('range').value,'0');assert.equal(ui.get('range-date').hidden,true);assert.equal(ui.get('record-count').textContent,5);}
  const blocked={get(){throw Error('denied')},set(){throw Error('denied')}};const ui=boot(blocked);await ui.flush();ui.get('range').value='day';ui.get('range').dispatch('change');ui.pick('2026-09-21');assert.equal(ui.get('record-count').textContent,2);assert.equal(ui.get('date-calendar').hidden,false);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(ui.get('range-date').value,'2026-09-21');
 });
+test('specific dates default to distribution and all/recent ranges default to trend, with manual overrides until filters change',async()=>{
+ const storage=new Map(),ui=boot(storage);await ui.flush();const mode=expected=>{assert.equal(ui.get('histogram-chart-tab').attrs['aria-pressed'],expected==='distribution');assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],expected==='trend');};
+ mode('trend');ui.get('range').value='day';ui.get('range').dispatch('change');mode('distribution');assert.equal(ui.get('date-calendar').hidden,false);
+ ui.get('trend-chart-tab').dispatch('click');mode('trend');ui.person('p2');mode('trend');ui.get('refresh-data').dispatch('click');await ui.flush();mode('trend');
+ ui.get('range-date').dispatch('click');ui.pick('2026-09-21');mode('distribution');assert.equal(ui.get('date-calendar').hidden,false,'picking dates still leaves calendar open');ui.get('trend-chart-tab').dispatch('click');ui.get('range-date').value='2026-09-22';ui.get('range-date').dispatch('change');mode('distribution');
+ ui.get('trend-chart-tab').dispatch('click');ui.get('calendar-clear').dispatch('click');mode('distribution');ui.get('trend-chart-tab').dispatch('click');ui.get('calendar-today').dispatch('click');mode('distribution');
+ for(const range of ['0','7','30','90']){ui.get('histogram-chart-tab').dispatch('click');ui.get('range').value=range;ui.get('range').dispatch('change');mode('trend');ui.get('histogram-chart-tab').dispatch('click');ui.get('refresh-data').dispatch('click');await ui.flush();mode('distribution');}
+ ui.get('comparison-tab').dispatch('click');ui.get('range').value='day';ui.get('range').dispatch('change');ui.get('personal-tab').dispatch('click');mode('distribution');assert.deepEqual(Object.keys(JSON.parse(storage.get('cube-stats-filter-v1'))).sort(),['date','range']);
+});
+test('full reload derives default chart from restored range instead of persisting the manual override',async()=>{
+ for(const range of ['day','0','7','30','90']){
+  const storage=new Map([['cube-stats-filter-v1',JSON.stringify({range,date:'2026-09-21'})]]),ui=boot(storage);await ui.flush();const expected=range==='day'?'histogram-chart-tab':'trend-chart-tab',opposite=range==='day'?'trend-chart-tab':'histogram-chart-tab';assert.equal(ui.get(expected).attrs['aria-pressed'],true);ui.get(opposite).dispatch('click');assert.equal(ui.get(opposite).attrs['aria-pressed'],true);
+  const reloaded=boot(storage);await reloaded.flush();assert.equal(reloaded.get(expected).attrs['aria-pressed'],true);assert.equal(reloaded.get('range-date').value,'2026-09-21');assert.equal(reloaded.get('date-calendar').hidden,true);
+ }
+});
 test('non-day ranges collapse the whole calendar slot rather than leaving a blank grid row',()=>{
  const css=fs.readFileSync(path.join(root,'styles.css'),'utf8');
  assert.match(css,/\.date-picker-slot:has\(input\[hidden\]\)\{display:none\}/);

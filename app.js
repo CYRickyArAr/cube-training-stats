@@ -34,6 +34,9 @@
       window.sessionStorage?.setItem(FILTER_KEY,JSON.stringify({range:$('#range').value,date:$('#range-date').value}));
     } catch (_) { /* The page still works when tab storage is unavailable. */ }
   }
+  function resetChartMode() {
+    chartMode = $('#range').value === 'day' ? 'distribution' : 'trend';
+  }
   function rangeDates() {
     return state.records.map(recordDate).filter(date => /^\d{4}-\d{2}-\d{2}$/.test(date)).sort();
   }
@@ -109,6 +112,7 @@
     const input = $('#range-date');
     if (date && (date < input.min || date > input.max)) return;
     input.value = date;
+    resetChartMode();
     saveFilter();
     if (date) calendarMonth = date.slice(0,7);
     page = 1;
@@ -454,6 +458,7 @@
   $('#range').addEventListener('change',() => {
     const input = $('#range-date'), specific = $('#range').value === 'day';
     if (specific && !input.value) input.value = rangeDates().at(-1) || '';
+    resetChartMode();
     saveFilter();
     page = 1; render();
     if (specific && !input.disabled) openCalendar();
@@ -523,7 +528,7 @@
       renderChart(recordsFor(selected));
     });
   }
-  $('#range-date').addEventListener('change',() => {saveFilter(); page = 1; render();});
+  $('#range-date').addEventListener('change',() => {resetChartMode(); saveFilter(); page = 1; render();});
   $('#prev-page').addEventListener('click',() => {page = Math.max(1,page-1); render();});
   $('#next-page').addEventListener('click',() => {page++; render();});
   $('#personal-tab').addEventListener('click',() => {view = 'personal'; render(); $('#stats-main').scrollTo?.({top:0,behavior:'instant'});});
@@ -541,6 +546,7 @@
   });
   setInterval(autoRead,60000);
   restoreFilter();
+  resetChartMode();
   render();
   read();
 })();
