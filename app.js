@@ -162,19 +162,20 @@
   }
   function renderChart(records) {
     const distribution = chartMode === 'distribution';
-    $('#chart-title').textContent = distribution ? 'ao5 用时分布' : 'ao5 变化趋势';
+    $('#chart-title').textContent = distribution ? 'ao5 用时分布' : '日均 ao5 趋势';
     $('#trend-chart-tab').setAttribute('aria-pressed',!distribution);
     $('#histogram-chart-tab').setAttribute('aria-pressed',distribution);
     $('#chart-legend').hidden = distribution;
     $('#chart').classList.toggle('is-distribution',distribution);
     if (distribution) { renderDistribution(records); return; }
-    const shown = [...records].sort(compareRecords);
-    $('#chart-caption').textContent = shown.length ? `绘制当前范围全部 ${shown.length} 组，按训练日期、源表行号排序；仅画线，不画圆点。DNF 保留横轴位置并断开折线；孤立有效记录用短横线表示。悬停查看日期、源单元格与原始成绩。未知日期排在已知日期之前。` : '腾讯源表在当前范围没有训练记录。';
+    const {days:shown,undatedRecords} = C.dailyTrend(records);
+    const undatedText = undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
+    $('#chart-caption').textContent = records.length ? `当前范围按 ${shown.length} 个训练日汇总，每天取当天全部有效 ao5 的平均值，DNF 不参与均值。按训练日期等距排列，无训练的日期不补值；全 DNF 日断开连线。只画线，不画圆点；单个或孤立日均值用短横线表示。悬停查看日期、日均值及有效 / DNF 组数。${undatedText}` : '腾讯源表在当前范围没有训练记录。';
     if (!shown.length) {
-      $('#chart').innerHTML = '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
+      $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
     }
-    const values = shown.filter(record => record.score !== null).map(record => record.score);
+    const values = shown.filter(day => day.mean !== null).map(day => day.mean);
     const W = 760, H = 300, L = 72, R = 25, T = 26, B = 53;
     const x = i => shown.length === 1 ? (W+L-R)/2 : L+i*(W-L-R)/(shown.length-1);
     let low = values.length ? values.reduce((a,b) => Math.min(a,b),Infinity) : 0, high = values.length ? values.reduce((a,b) => Math.max(a,b),-Infinity) : 1;
@@ -182,35 +183,37 @@
     low = Math.max(0,low-padding);
     high += padding;
     const y = value => T+(high-value)/(high-low)*(H-T-B);
-    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-count="${shown.length}" aria-label="ao5 趋势图：${shown.length} 组记录，用时越低越好"><title>ao5 训练趋势</title><desc>绘制当前范围全部记录，按训练日期与源表行号排列；相邻有效 ao5 连线，不画圆点；DNF 处断开，孤立有效记录用短横线表示。</desc>`;
+    let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" data-trend-days="${shown.length}" aria-label="日均 ao5 趋势图：${shown.length} 个训练日，用时越低越好"><title>日均 ao5 趋势</title><desc>按训练日期等距排列，每天使用当天全部有效 ao5 的均值，不画逐组曲线或圆点；全 DNF 日断开连线，单个或孤立日均值用短横线表示。</desc>`;
     if (values.length) {
       for (let i=0;i<=4;i++) {
         const value = low+(high-low)*i/4, yy = y(value);
         svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+4}" text-anchor="end" fill="#737373" font-size="11" font-family="Consolas,monospace">${escape(C.formatScore(value))}</text>`;
       }
     } else {
-      svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">当前范围只有 DNF，没有有效用时曲线</text>`;
+      svg += `<text x="${W/2}" y="${H/2}" text-anchor="middle" fill="#737373" font-size="13">当前范围各训练日只有 DNF，没有有效日均曲线</text>`;
     }
     const segments = [];
-    shown.forEach((record,i) => {
-      if (record.score === null) return;
-      const previousValid = i > 0 && shown[i-1].score !== null;
-      const nextValid = i+1 < shown.length && shown[i+1].score !== null;
+    shown.forEach((day,i) => {
+      if (day.mean === null) return;
+      const previousValid = i > 0 && shown[i-1].mean !== null;
+      const nextValid = i+1 < shown.length && shown[i+1].mean !== null;
       if (!previousValid && !nextValid) {
         const half = Math.min(3,(W-L-R)/Math.max(1,shown.length-1)/4);
-        segments.push(`M${Math.max(L,x(i)-half)},${y(record.score)} L${Math.min(W-R,x(i)+half)},${y(record.score)}`);
-      } else segments.push(`${previousValid ? 'L' : 'M'}${x(i)},${y(record.score)}`);
+        segments.push(`M${Math.max(L,x(i)-half)},${y(day.mean)} L${Math.min(W-R,x(i)+half)},${y(day.mean)}`);
+      } else segments.push(`${previousValid ? 'L' : 'M'}${x(i)},${y(day.mean)}`);
     });
     if (segments.length) svg += `<path class="trend-line" d="${segments.join(' ')}" fill="none" stroke="#0070f3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    // Invisible full-height hit regions keep every source tooltip available
-    // without drawing point markers or connecting across a DNF.
-    shown.forEach((record,i) => {
-      const title = `${dateText(record)} · ${record.sourceCell || '来源未标注'} · ao5 ${scoreText(record)}${record.note ? ' · '+record.note : ''}`;
+    if (shown.length === 1 && shown[0].mean !== null) svg += `<text x="${x(0)}" y="${y(shown[0].mean)-12}" text-anchor="middle" fill="#0070f3">均值 ${time(shown[0].mean)}</text>`;
+    // Invisible day-sized hover regions preserve details without drawing dots.
+    shown.forEach((day,i) => {
+      const title = `${day.date} · 平均 ao5 ${day.mean === null ? '—（全 DNF）' : time(day.mean)} · ${day.valid} 组有效 / ${day.dnf} 组 DNF · 共 ${day.total} 组`;
       const left = i ? (x(i-1)+x(i))/2 : L, right = i+1 < shown.length ? (x(i)+x(i+1))/2 : W-R;
-      svg += `<rect class="trend-hit" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
+      svg += `<rect class="trend-hit" data-date="${escape(day.date)}" data-mean="${day.mean ?? ''}" data-valid="${day.valid}" data-dnf="${day.dnf}" data-total="${day.total}" x="${left}" y="${T}" width="${right-left}" height="${H-T-B}" fill="transparent"><title>${escape(title)}</title></rect>`;
     });
-    [...new Set([0,Math.floor((shown.length-1)/2),shown.length-1])].forEach(i => {
-      svg += `<text x="${x(i)}" y="${H-13}" text-anchor="middle" fill="#737373" font-size="11">第 ${i+1} 组</text>`;
+    const tickCount = Math.min(shown.length,Math.max(2,Math.min(6,Math.floor(($('#chart').clientWidth || W)/110))));
+    const ticks = tickCount === 1 ? [0] : Array.from({length:tickCount},(_,i) => Math.round(i*(shown.length-1)/(tickCount-1)));
+    ticks.forEach(i => {
+      svg += `<text class="trend-date" x="${x(i)}" y="${H-13}" text-anchor="${shown.length === 1 ? 'middle' : i === 0 ? 'start' : i === shown.length-1 ? 'end' : 'middle'}" fill="#737373" font-size="11">${escape(shown[i].date)}</text>`;
     });
     $('#chart').innerHTML = svg+'</svg>';
   }

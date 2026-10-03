@@ -46,6 +46,22 @@
       targetRate:n && target !== null ? values.filter(x => x <= target).length / n * 100 : null
     };
   }
+  // The caller supplies the current person's range-filtered records.
+  function dailyTrend(records) {
+    const grouped = new Map();
+    let undatedRecords = 0;
+    for (const record of records) {
+      const date = record.date || (record.at ? record.at.slice(0,10) : '');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { undatedRecords++; continue; }
+      if (!grouped.has(date)) grouped.set(date,{date,total:0,valid:0,dnf:0,sum:0});
+      const day = grouped.get(date);
+      day.total++;
+      if (record.score === null) day.dnf++;
+      else { day.valid++; day.sum += record.score; }
+    }
+    const days = [...grouped.values()].sort((a,b) => a.date.localeCompare(b.date)).map(({sum,...day}) => ({...day,mean:day.valid ? sum/day.valid : null}));
+    return {days,undatedRecords};
+  }
   function dailyComparison(records, personId, date) {
     const days = new Map();
     for (const record of records) {
@@ -196,7 +212,7 @@
     }
     return '\ufeff' + rows.map(row => row.map(cell).join(',')).join('\r\n');
   }
-  const api = {parseScore, formatScore, analyze, dailyComparison, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
+  const api = {parseScore, formatScore, analyze, dailyTrend, dailyComparison, histogram, competition, createPerson, updatePerson, deletePerson, putRecord, removeRecord, filterRecords, validateState, toCsv};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.CubeStats = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
