@@ -60,7 +60,7 @@ test('trend hides bottom date labels but keeps complete dates in hover details f
   const ui=boot(records);await ui.flush();assert.doesNotMatch(ui.chart(),/class="trend-date"/);
   const visible=[...ui.chart().matchAll(/<text\b[^>]*>(.*?)<\/text>/g)].map(m=>m[1]).join(' ');assert.doesNotMatch(visible,/\d{4}-\d{2}-\d{2}/);
   for(const r of records)assert.ok(ui.chart().includes(`<title>${r.date} · 平均 ao5`));
-  assert.match(ui.get('chart-caption').textContent,/底部不标日期/);assert.match(ui.chart(),/class="trend-line"/);
+  assert.match(ui.get('chart-caption').textContent,/方向键查看日期/);assert.match(ui.chart(),/class="trend-line"/);
  }
 });
 test('trend axis uses clean tenths of seconds, outward bounds and bounded nice steps without rounding means',async()=>{

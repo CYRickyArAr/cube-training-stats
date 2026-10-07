@@ -54,5 +54,5 @@ test('day comparison explains no date, no records, earliest date and all-DNF cas
  const ui=boot([make(600,2),make(null,2,'2026-10-01'),make(800,2,'2026-09-30')]);await ui.flush();assert.match(ui.text(),/上次 2026-10-01 只有 DNF/);
  ui.range('day','2026-10-01');assert.match(ui.text(),/2026-10-01 只有 DNF/);ui.range('day','2026-09-30');assert.match(ui.text(),/此前没有训练记录/);ui.range('day','2026-09-29');assert.match(ui.text(),/2026-09-29 没有训练记录/);ui.range('day','');assert.match(ui.text(),/请选择训练日期/);
  ui.update([make(600,2,null)]);ui.get('refresh-data').dispatch('click');await ui.flush();ui.range('0');assert.match(ui.text(),/没有标注日期的训练记录/);assert.doesNotMatch(ui.text(),/40 组/);
- const html=fs.readFileSync(path.join(root,'index.html'),'utf8');assert.match(html,/不截取固定组数/);assert.doesNotMatch(html,/最近 40 条/);
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');assert.doesNotMatch(html,/最近 40 条/);
 });

@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light">
-  <title>魔方成绩 · 腾讯文档只读统计</title>
+  <title>魔方成绩</title>
   <link rel="stylesheet" href="styles.css">
   <script src="core.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="./index.html" aria-label="魔方成绩首页"><span class="cube-mark" aria-hidden="true">▦</span><span>魔方成绩<small>训练成绩 · 只读快照</small></span></a>
+    <a class="brand" href="./index.html" aria-label="魔方成绩首页"><span class="cube-mark" aria-hidden="true">▦</span><span>魔方成绩</span></a>
     <div class="top-actions"><a id="source-link" class="button-link" target="_blank" rel="noopener noreferrer" aria-disabled="true">打开腾讯文档</a><button id="refresh-data" type="button">刷新快照</button><button id="export-csv" type="button" disabled>导出 CSV</button></div>
     <section class="sync-card" aria-label="腾讯文档读取状态">
       <div class="sync-heading"><strong id="sync-status" role="status" aria-live="polite">正在读取腾讯文档…</strong><label class="auto-sync-label"><input id="auto-sync" type="checkbox" checked>每 60 秒检查新快照</label></div>
@@ -22,7 +22,6 @@
     <aside class="sidebar">
       <div class="section-heading"><span>训练人员</span><span id="people-count" class="badge">0</span></div>
       <nav id="people-list" aria-label="训练人员列表"></nav>
-      <div class="sidebar-foot"><strong>腾讯文档是唯一数据源</strong><p id="source-info" class="muted">等待读取源表信息</p><p>Cloudflare 每 5 分钟触发 Actions 读取源表（执行可能延迟）。本站只展示公开统计快照；可通过顶部按钮打开腾讯源表，访问权限由腾讯文档控制。</p></div>
     </aside>
     <main id="stats-main" tabindex="-1">
       <div id="notice" class="notice" role="status" aria-live="polite" hidden></div>
@@ -33,28 +32,26 @@
         <div class="tabs" role="tablist" aria-label="统计视图"><button id="personal-tab" role="tab" aria-selected="true" aria-controls="personal-panel" type="button">个人分析</button><button id="comparison-tab" role="tab" aria-selected="false" aria-controls="comparison-panel" type="button">多人对比</button></div>
         <div class="range-label"><label for="range">统计范围</label><div class="range-controls"><select id="range"><option value="0">全部记录</option><option value="7">最近 7 天</option><option value="30">最近 30 天</option><option value="90">最近 90 天</option><option value="day">指定日期</option></select><span class="date-picker-slot"><input id="range-date" type="date" readonly role="button" aria-label="选择具体训练日期" aria-haspopup="dialog" aria-expanded="false" aria-controls="date-calendar" title="点击打开日历，选中日期后保持展开" hidden><span id="date-calendar" class="date-calendar" role="dialog" aria-label="选择训练日期" hidden><span class="calendar-heading"><button id="calendar-prev" type="button" aria-label="上个月">‹</button><strong id="calendar-month" aria-live="polite"></strong><button id="calendar-next" type="button" aria-label="下个月">›</button></span><span class="calendar-weekdays" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></span><span id="calendar-days" class="calendar-days" role="group" aria-label="训练日期"></span><span class="calendar-footer"><button id="calendar-clear" type="button">清除</button><span>选日期不关闭 · 点外部关闭</span><button id="calendar-today" type="button">今天</button></span></span></span></div></div>
       </div>
-      <section id="welcome" class="welcome card"><span class="welcome-symbol" aria-hidden="true">▦</span><h2 id="welcome-title">正在读取腾讯文档</h2><p id="welcome-text">成功读取后，自动显示源表人员与成绩。没有示例或本地备用数据。</p></section>
+      <section id="welcome" class="welcome card"><span class="welcome-symbol" aria-hidden="true">▦</span><h2 id="welcome-title">正在读取腾讯文档</h2><p id="welcome-text" hidden></p></section>
       <section id="personal-panel" role="tabpanel" aria-labelledby="personal-tab" hidden>
         <div class="metrics">
-          <article class="card metric"><span>最佳 ao5</span><strong id="metric-best">—</strong><small>当前范围的个人最佳</small></article>
-          <article class="card metric"><span>平均 ao5</span><strong id="metric-mean">—</strong><small>全部有效组的平均用时</small></article>
-          <article class="card metric"><span>中位数 ao5</span><strong id="metric-median">—</strong><small>有效用时排序后的中间值</small></article>
+          <article class="card metric"><span>最佳 ao5</span><strong id="metric-best">—</strong></article>
+          <article class="card metric"><span>平均 ao5</span><strong id="metric-mean">—</strong></article>
+          <article class="card metric"><span>中位数 ao5</span><strong id="metric-median">—</strong></article>
           <article class="card metric"><span>Sub7 率</span><strong id="metric-sub7">—</strong><small id="sub7-caption">ao5 &lt; 7 秒 / 总组数，DNF 未达标</small></article>
         </div>
         <div class="overview-grid">
-          <section class="card chart-card"><div class="card-heading"><h3 id="chart-title">日均 ao5 趋势</h3><div class="chart-switch" role="group" aria-label="选择图表"><button id="trend-chart-tab" type="button" aria-pressed="true" aria-controls="chart">趋势</button><button id="histogram-chart-tab" type="button" aria-pressed="false" aria-controls="chart">分布</button></div></div><div id="chart" class="chart"></div><details class="chart-help"><summary>图表说明</summary><span id="chart-legend" class="legend"><i></i>日均 ao5 · 未训练日沿用上次</span><div id="chart-caption" class="chart-caption"></div></details></section>
+          <section class="card chart-card"><div class="card-heading"><h3 id="chart-title">日均 ao5 趋势</h3><div class="chart-switch" role="group" aria-label="选择图表"><button id="trend-chart-tab" type="button" aria-pressed="true" aria-controls="chart">趋势</button><button id="histogram-chart-tab" type="button" aria-pressed="false" aria-controls="chart">分布</button></div></div><div id="chart" class="chart"></div><div class="chart-meta"><span id="chart-legend" class="legend"><i></i>日均 ao5（秒） · 未训练日沿用上次</span><div id="chart-caption" class="chart-caption"></div></div></section>
           <section class="card analysis-card"><div class="card-heading"><h3>训练分析</h3></div><div id="analysis" class="analysis"></div></section>
         </div>
-        <details class="card history-card"><summary class="card-heading"><h3>成绩记录 <span id="record-count" class="badge">0</span></h3><span class="disclosure-label">展开 / 收起明细</span></summary><p class="history-help muted">按训练日期、源表行号倒序；原始精度和来源位置保留。</p><div class="table-wrap"><table><thead><tr><th>训练日期</th><th>ao5（源表精度）</th><th>备注</th><th>来源单元格</th></tr></thead><tbody id="records-body"></tbody></table></div><div id="pagination" class="pagination" hidden><button id="prev-page" type="button">上一页</button><span id="page-info"></span><button id="next-page" type="button">下一页</button></div></details>
-        <details class="method-help"><summary>统计口径与注意事项</summary><p class="footnote">Sub7 率 = ao5 严格小于 7 秒的组数 / 当前范围总组数；7.00 秒不达标，DNF 计入总组数但不达标，按源表原始精度判断。每条是一组已计算的 ao5。DNF 不参与均值、中位数、P90 和标准差；异常大值仍计入统计。P90：将有效用时从小到大排列，取第 ⌈0.9 × 有效组数⌉ 个，至少 90% 的有效 ao5 不超过该用时；不足 10 组仅供参考。最长连续 Sub7：在当前人员、当前范围内，按训练日期、源表行号依次计算，可跨日；DNF 或 ≥7 秒中断，按原始精度判断。暂无记录显示「—」，有记录但无 Sub7 显示 0 组。日均变化比较该人员本次与上一次有训练记录的日期，各自全部有效 ao5 的均值，不截取固定组数；DNF 不参与均值，任一天没有有效成绩时不比较，也不跳过全 DNF 的上次训练。指定日期以所选日为本次，其他范围以范围内最新训练日为本次；对照日可在筛选范围外，中间未训练的日期自动跳过。日均变化直接描述比上次快或慢多少秒，使用两天原始均值相减后保留两位小数，不显示百分比；差值四舍五入为 0.00 秒时显示基本持平。样本量不同请谨慎比较。中位数将有效用时排序后取中间值，偶数组取中间两个的平均；标准差采用总体标准差，至少 2 组有效成绩才显示，越小表示用时越集中。趋势图按自然日补齐，未训练日沿用上次日均值仅用于画图，不计入任何成绩统计；无历史均值则留空，全 DNF 日断线且不向后延续旧均值。除日均变化的上次训练对照与趋势图的沿用值外，指定日期只统计当天源表成绩；未知日期不补成今天，也不计入日期筛选。</p></details>
+        <details class="card history-card"><summary class="card-heading"><h3>成绩记录 <span id="record-count" class="badge">0</span></h3><span class="disclosure-label">展开 / 收起明细</span></summary><div class="table-wrap"><table><thead><tr><th>训练日期</th><th>ao5（源表精度）</th><th>备注</th><th>来源单元格</th></tr></thead><tbody id="records-body"></tbody></table></div><div id="pagination" class="pagination" hidden><button id="prev-page" type="button">上一页</button><span id="page-info"></span><button id="next-page" type="button">下一页</button></div></details>
       </section>
-      <section id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab" hidden><section class="card"><div class="card-heading"><h3>多人训练对比</h3><p>同一统计范围 · 按累计比分从高到低</p></div><p id="competition-summary" class="competition-summary" aria-live="polite"></p><div class="table-wrap"><table><thead><tr><th>人员</th><th>累计比分</th><th>总组数 / DNF</th><th>最佳 ao5</th><th>平均 ao5</th><th>Sub7 率</th><th>标准差</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section><p class="footnote">比分从高到低；同分按平均 ao5 从快到慢排序，无比赛比分（—）排在最后。样本数量不同，请谨慎比较。</p><details class="competition-help"><summary>比分规则</summary><p>按每天实际有成绩（包括 DNF）的人员确定参赛人数，缺席者不占名额，比分显示「—」。源表同一行、同一日期视为一局；全部或最近天数范围按各天实际人数分别计分后累计。完整局按用时从快到慢排名，N 人第 r 名得 N − r 分：3 人为 2 / 1 / 0，2 人为 1 / 0。并列名次同分，后续名次顺延跳过（3 人并列第一各得 2 分，下一名第 3 得 0 分）；DNF 始终得 0 分。当天参赛者在某一行缺成绩，该局不计分；不按各人的第几条记录凑局。没有完整局时比分显示「—」。按累计比分从高到低排序；同分按有效 ao5 均值从低到高，再按姓名排序。无比赛比分（—）排在最后。</p></details>
-        <section class="card fun-card" aria-labelledby="fun-title"><div class="card-heading"><h3 id="fun-title">趣味统计</h3><p>同轮 Sub7 · 实际发生率</p></div><div class="fun-metrics" aria-live="polite"><div class="fun-metric"><span>三人都 Sub7</span><strong id="fun-sub7-3">—</strong><small id="fun-sub7-3-count">暂无样本</small></div><div class="fun-metric"><span>至少两人 Sub7</span><strong id="fun-sub7-2">—</strong><small id="fun-sub7-2-count">暂无样本</small></div><div class="fun-metric"><span>至少一人 Sub7</span><strong id="fun-sub7-1">—</strong><small id="fun-sub7-1-count">暂无样本</small></div></div><p id="fun-summary" class="fun-summary"></p><details class="competition-help"><summary>统计口径</summary><p>同一日期、同一源表行匹配一局，三人均有成绩才计入分母；缺人、重复或异常局不参与。Sub7 按原始成绩严格小于 7 秒判断，DNF 算未达标，全 DNF 局仍计入分母。「至少两人」包含三人都达标，「至少一人」包含两人或三人达标，三项不能相加。显示达标局数 / 完整局数，随日期范围筛选；无样本显示「—」，不是理论概率。</p></details></section>
+      <section id="comparison-panel" role="tabpanel" aria-labelledby="comparison-tab" hidden><section class="card"><div class="card-heading"><h3>多人训练对比</h3></div><p id="competition-summary" class="competition-summary" aria-live="polite"></p><div class="table-wrap"><table><thead><tr><th>人员</th><th>累计比分</th><th>总组数 / DNF</th><th>最佳 ao5</th><th>平均 ao5</th><th>Sub7 率</th><th>标准差</th></tr></thead><tbody id="comparison-body"></tbody></table></div></section>
+        <section class="card fun-card" aria-labelledby="fun-title"><div class="card-heading"><h3 id="fun-title">趣味统计</h3></div><div class="fun-metrics" aria-live="polite"><div class="fun-metric"><span>三人都 Sub7</span><strong id="fun-sub7-3">—</strong><small id="fun-sub7-3-count">暂无样本</small></div><div class="fun-metric"><span>至少两人 Sub7</span><strong id="fun-sub7-2">—</strong><small id="fun-sub7-2-count">暂无样本</small></div><div class="fun-metric"><span>至少一人 Sub7</span><strong id="fun-sub7-1">—</strong><small id="fun-sub7-1-count">暂无样本</small></div></div><p id="fun-summary" class="fun-summary"></p></section>
       </section>
-      <footer>公开训练统计 <span>每条记录是一组 ao5 · 修改数据请回源表</span></footer>
     </main>
   </div>
-  <noscript><p class="notice">需要 JavaScript 和本地读取服务，才能读取与分析腾讯文档。</p></noscript>
+  <noscript><p class="notice">请启用 JavaScript 后重试。</p></noscript>
 </body>
 </html>
 

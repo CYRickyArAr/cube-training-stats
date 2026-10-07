@@ -123,7 +123,7 @@ test('comparison sorts higher match points before faster mean and recomputes ord
 test('zero-point competitors precede dashed solo trainers, and exact point/mean ties use name order',async()=>{
  const ui=boot();await ui.flush();ui.update({records:[...round([null,700],2),record('c',300,3,'2026-09-30')]});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedPoints(ui),{a:'0',b:'1',c:'—'});assert.deepEqual(displayedOrder(ui),['b','a','c'],'0 points are real competition scores, not absence');
  ui.update({people:[{id:'a',name:'Zulu'},{id:'b',name:'Alpha'},{id:'c',name:'Charlie'}],records:round([600,600],2)});ui.get('refresh-data').dispatch('click');await ui.flush();assert.deepEqual(displayedOrder(ui),['b','a','c']);
- const html=fs.readFileSync(path.join(root,'index.html'),'utf8');assert.match(html,/按累计比分从高到低/);assert.doesNotMatch(html,/按有效 ao5 均值排序|比分不改变原有均值排序/);
+ const html=fs.readFileSync(path.join(root,'index.html'),'utf8');assert.doesNotMatch(html,/按有效 ao5 均值排序|比分不改变原有均值排序/);
 });
 test('the competition column preserves unchanged personal statistics and uses mean only to break point ties',async()=>{
  const ui=boot();await ui.flush();const before={best:ui.get('metric-best').textContent,mean:ui.get('metric-mean').textContent,sub7:ui.get('metric-sub7').textContent};

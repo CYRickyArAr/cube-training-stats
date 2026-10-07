@@ -219,9 +219,9 @@
     const endDate = mode === 'day' ? $('#range-date').value : mode === '0' && dates.at(-1) > today ? dates.at(-1) : today;
     const startDate = mode === 'day' ? endDate : mode === '0' ? dates[0] : new Date(Date.parse(today+'T00:00:00Z')-(Number(mode)-1)*86400000).toISOString().slice(0,10);
     const {days:shown,undatedRecords} = C.dailyTrend(history,{startDate,endDate});
-    const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，不进入日均曲线，仍计入其他适用统计。` : '';
-    const trainingDays = shown.filter(day => day.total).length, carriedDays = shown.filter(day => day.carried).length;
-    $('#chart-caption').textContent = shown.length ? `按自然日逐天绘制，共 ${shown.length} 天（${trainingDays} 个训练日，${carriedDays} 天沿用均值）。有训练时取当天全部有效 ao5 的平均值，DNF 不参与；无训练记录时沿用此前日均值，保持水平，只用于画图，不增加成绩或统计样本。范围起点可沿用更早记录；尚无历史均值时留空，全 DNF 日及其后休息日断线，直到再次有有效成绩。平时只画线，悬停时显示当前日期的圆点与详情；移开后隐藏。底部不标日期，也可用方向键查看各天、Esc 关闭。${undatedText}` : records.length ? undatedText : '腾讯源表在当前范围没有训练记录。';
+    const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，未入曲线。` : '';
+    const trainingDays = shown.filter(day => day.total).length;
+    $('#chart-caption').textContent = shown.length ? `悬停 / 方向键查看日期 · Esc 关闭${undatedText ? ` · ${undatedText}` : ''}` : undatedText;
     if (!shown.length) {
       $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -310,9 +310,9 @@
     const headroom = layouts.reduce((max,layout) => Math.max(max,layout.headroom),0);
     const {step,top,slot,barWidth,x,baseY,countLabels} = layouts[0];
     const T = baseT+headroom, H = baseH+headroom, y = count => baseY(count)+headroom;
-    $('#chart-caption').textContent = `当前范围全部 ${valid} 组有效 ao5；DNF ${dnf} 组，不进入用时柱。横轴为用时（秒），纵轴为组数；每档 0.10 秒。例如 6.00–6.09 实际表示 6.00 ≤ 用时 < 6.10，6.099 也计入此档；按原始精度分桶，不先四舍五入。悬停每根柱查看区间、组数和占有效组比例。${sparse ? '用时跨度很大：省略长段空区间，各柱仍为独立 0.10 秒区间，所有有效值保留。' : ''}整体分布完整适应图表宽度，无需左右滚动。每个刻度表示该 0.10 秒区间的起点（如 6.0 表示 6.00 ≤ 用时 < 6.10）；刻度密集时分行错开，悬停可看完整区间。`;
+    $('#chart-caption').textContent = `用时（秒） / 组数 · 每档 0.10 秒 · 悬停查看详情${sparse ? ' · 已省略空区间' : ''}`;
     if (!valid) {
-      $('#chart').innerHTML = `<div class="chart-empty" style="height:${H}px;display:grid;place-content:center"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组；不伪造有效用时柱。` : '请切换人员或统计范围。'}</div>`;
+      $('#chart').innerHTML = `<div class="chart-empty" style="height:${H}px;display:grid;place-content:center"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组` : '请切换人员或统计范围。'}</div>`;
       return;
     }
     let svg = `<svg class="distribution-svg" data-plot-top="${T}" data-plot-bottom="${H-B}" data-tick-rows="${tickRows}" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
@@ -357,10 +357,10 @@
       trendClass = equal ? '' : difference > 0 ? 'good' : 'bad';
     }
     const trendDetail = previous ? `上次 ${previous.date}：${previous.valid} 组有效；本次 ${current.date}：${current.valid} 组有效。各天全部有效 ao5 的均值，DNF 不参与。` : '按各训练日全部有效 ao5 比较，不要求固定组数。';
-    const stabilityText = stats.valid >= 2 ? '越小，成绩越稳定；DNF 不参与。' : '至少 2 组有效 ao5 才能计算。';
-    const p90Text = stats.valid ? `90% 有效 ao5 ≤ 此值，越低越好。${stats.valid < 10 ? '不足 10 组，仅供参考。' : ''}` : '没有有效 ao5，暂不能计算。';
-    const streakText = stats.total ? 'DNF 或 ≥7 秒中断；可跨日。' : '当前范围暂无 ao5 记录。';
-    $('#analysis').innerHTML = `<div class="analysis-item" data-trend-date="${escape(current.date)}" data-previous-date="${escape(previous?.date || '')}"><span>日均变化 · 较上次训练</span><strong id="analysis-trend" class="${trendClass}">${escape(trendTitle)}</strong><p id="analysis-trend-caption" title="${escape(trendDetail)}">${escape(trendText)}</p></div><div class="analysis-item"><span>标准差</span><strong id="analysis-std">${stats.valid >= 2 ? time(stats.std) : '—'}</strong><p>${escape(stabilityText)}</p></div><div class="analysis-item"><span>P90 ao5</span><strong id="analysis-p90">${time(stats.p90)}</strong><p>${escape(p90Text)}</p></div><div class="analysis-item"><span>最长连续 Sub7</span><strong id="analysis-sub7-streak">${stats.longestSub7 === null ? '—' : `${stats.longestSub7} 组`}</strong><p>${escape(streakText)}</p></div>`;
+    const stabilityText = stats.valid >= 2 ? '' : '至少 2 组有效 ao5 才能计算。';
+    const p90Text = stats.valid ? (stats.valid < 10 ? '不足 10 组，仅供参考。' : '') : '没有有效 ao5，暂不能计算。';
+    const streakText = stats.total ? '' : '当前范围暂无 ao5 记录。';
+    $('#analysis').innerHTML = `<div class="analysis-item" data-trend-date="${escape(current.date)}" data-previous-date="${escape(previous?.date || '')}"><span>日均变化 · 较上次训练</span><strong id="analysis-trend" class="${trendClass}">${escape(trendTitle)}</strong><p id="analysis-trend-caption" title="${escape(trendDetail)}">${escape(trendText)}</p></div><div class="analysis-item"><span>标准差</span><strong id="analysis-std">${stats.valid >= 2 ? time(stats.std) : '—'}</strong>${stabilityText ? `<p>${escape(stabilityText)}</p>` : ''}</div><div class="analysis-item"><span>P90 ao5</span><strong id="analysis-p90">${time(stats.p90)}</strong>${p90Text ? `<p>${escape(p90Text)}</p>` : ''}</div><div class="analysis-item"><span>最长连续 Sub7</span><strong id="analysis-sub7-streak">${stats.longestSub7 === null ? '—' : `${stats.longestSub7} 组`}</strong>${streakText ? `<p>${escape(streakText)}</p>` : ''}</div>`;
   }
   function renderHistory(records,best) {
     const ordered = [...records].sort((a,b) => compareRecords(b,a));
@@ -396,13 +396,13 @@
     $('#people-count').textContent = state.people.length;
     $('#people-list').innerHTML = state.people.length ? state.people.map(person => {
       const count = state.records.filter(record => record.personId === person.id).length;
-      return `<button type="button" class="person-button ${person.id === selected ? 'active' : ''}" data-person="${escape(person.id)}" aria-current="${person.id === selected}"><span class="avatar">${escape([...person.name][0])}</span><span><strong>${escape(person.name)}</strong><small>${count} 组源表记录</small></span></button>`;
+      return `<button type="button" class="person-button ${person.id === selected ? 'active' : ''}" data-person="${escape(person.id)}" aria-current="${person.id === selected}"><span class="avatar">${escape([...person.name][0])}</span><span><strong>${escape(person.name)}</strong><small>${count} 组</small></span></button>`;
     }).join('') : '<p class="help">尚无腾讯源表人员</p>';
     renderPersonal();
     const warnings = sync.warnings || [];
     $('#source-warnings').hidden = !warnings.length;
     const warningsOpen = $('#source-warnings').querySelector?.('details')?.open;
-    $('#source-warnings').innerHTML = warnings.length ? `<details${warningsOpen ? ' open' : ''}><summary>源表警告 ${warnings.length} 条 · 异常值仍计入统计 · 展开核查</summary><p>保留源表原始值；请回腾讯文档核查并修正，再刷新此页。</p><ul>${warnings.map(warning => `<li><strong>${escape(warning.cell || '源表')}</strong>：${escape(warning.message)}</li>`).join('')}</ul></details>` : '';
+    $('#source-warnings').innerHTML = warnings.length ? `<details${warningsOpen ? ' open' : ''}><summary>源表警告 ${warnings.length} 条 · 展开核查</summary><p>请在腾讯文档核查后刷新。</p><ul>${warnings.map(warning => `<li><strong>${escape(warning.cell || '源表')}</strong>：${escape(warning.message)}</li>`).join('')}</ul></details>` : '';
     const failed = !!sync.error || sync.stale;
     const loading = busy || sync.refreshing;
     $('#sync-status').textContent = loading ? '正在加载统计快照…' : failed ? (snapshot ? '读取失败 · 正在显示旧数据' : '首次读取失败 · 暂无数据') : snapshot ? '统计快照已加载' : '尚未读取腾讯文档';
@@ -412,13 +412,13 @@
     $('#export-csv').disabled = !snapshot;
     $('#notice').hidden = !failed;
     $('#notice').classList.toggle('error',failed);
-    $('#notice').textContent = failed ? `${snapshot ? '腾讯文档读取失败，保留最后成功读取的旧数据。' : '腾讯文档首次读取失败，没有可展示的数据，也不会加载示例。'}${sync.error || '当前快照已过期。'} 请检查读取服务与腾讯文档后重试。` : '';
+    $('#notice').textContent = failed ? `${snapshot ? '腾讯文档读取失败，保留最后成功读取的旧数据。' : '腾讯文档首次读取失败，暂无数据。'}${sync.error || '当前快照已过期。'} 请检查读取服务与腾讯文档后重试。` : '';
     const source = sync.source;
-    $('#source-info').textContent = source ? [source.title,source.sheetName].filter(Boolean).join(' · ') : '等待读取源表信息';
     // The publication step supplies a credential-free link in HTML only.
     // Snapshot data cannot change the source button's destination.
     $('#welcome-title').textContent = loading ? '正在读取腾讯文档' : failed ? '腾讯文档首次读取失败' : '源表暂未识别到人员';
-    $('#welcome-text').textContent = failed ? '没有示例或本地备用数据。请确认读取服务可用，并点击「立即刷新」重试。' : '人员由腾讯表头自动识别；请在腾讯文档中维护源数据。';
+    $('#welcome-text').hidden = loading;
+    $('#welcome-text').textContent = loading ? '' : failed ? '请点击刷新重试。' : '请在腾讯文档添加人员与成绩后刷新。';
   }
   function remoteSnapshot(data) {
     const invalid = () => { throw new Error('腾讯快照格式无效，未替换最后成功的数据。'); };
@@ -451,7 +451,7 @@
         selected = state.people.some(person => person.id === selected) ? selected : state.people[0]?.id || null;
       }
       result.stale = !result.lastSuccessAt || Date.now()-Date.parse(result.lastSuccessAt)>60*60000;
-      if(result.stale) result.error='快照已超过 60 分钟未更新；Actions 可能延迟或读取失败。';
+      if(result.stale) result.error='快照已超过 60 分钟未更新。';
       sync = {...sync,...result,source:result.source || result.data?.source || sync.source,warnings:result.warnings || result.data?.warnings || [],lastSuccessAt:result.lastSuccessAt || sync.lastSuccessAt};
       if (!response.ok || (!result.data && !result.refreshing)) {
         sync.error ||= `读取服务返回 ${response.status}，没有腾讯数据。`;
