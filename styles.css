@@ -142,7 +142,7 @@ td.competition-leading{color:var(--blue)}
 .chart-switch{display:flex;flex:0 0 auto;gap:3px;padding:3px;background:#f5f5f5;border:1px solid var(--line);border-radius:8px}
 .chart-switch button{font-size:16px;line-height:1.5;padding:3px 10px;border-color:transparent;background:transparent;border-radius:5px}
 .chart-switch button[aria-pressed=true]{color:var(--blue);background:#fff;border-color:var(--line)}
-.chart.is-distribution{display:block;height:auto;min-height:218px;overflow:hidden;padding:0 8px}
+.chart.is-distribution{display:block;height:var(--chart-frame-height,var(--chart-base-height,218px));min-height:0;overflow:hidden;padding:0 8px}
 .chart.is-distribution .distribution-svg{width:100%;max-width:100%;max-height:none;display:block}
 .chart.is-distribution .distribution-svg text{font-size:16px;font-family:"Segoe UI","Microsoft YaHei",sans-serif;font-variant-numeric:tabular-nums}
 .chart.is-distribution .distribution-svg .distribution-tick{font-size:14px;font-weight:500}
@@ -158,9 +158,15 @@ td.competition-leading{color:var(--blue)}
 
 
 /* Compact chart units, legend and interaction hints. */
-.chart-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:4px 14px 8px}
+.chart-meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:4px 14px 8px;min-height:var(--chart-meta-height,0px)}
 .chart-meta .legend{white-space:normal}
 .chart-caption{padding:0;line-height:1.4;color:var(--muted)}
 .chart-caption:empty{display:none}
 
 .analysis-item p.analysis-help{font-size:14px;line-height:1.4}
+
+/* Both chart modes reserve the same content-sized plot and metadata frame. */
+.chart{--chart-base-height:218px;height:var(--chart-frame-height,var(--chart-base-height))}
+.chart svg{max-height:none}
+@media(max-width:950px){.chart{--chart-base-height:230px}}
+@media(max-width:650px){.chart{--chart-base-height:210px}}

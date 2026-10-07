@@ -227,9 +227,7 @@
     $('#chart-title').textContent = distribution ? 'ao5 用时分布' : '日均 ao5 趋势';
     $('#trend-chart-tab').setAttribute('aria-pressed',!distribution);
     $('#histogram-chart-tab').setAttribute('aria-pressed',distribution);
-    $('#chart-legend').hidden = distribution;
     $('#chart').classList.toggle('is-distribution',distribution);
-    if (distribution) { renderDistribution(records); return; }
     const mode = $('#range').value, today = chinaToday();
     const history = state.records.filter(record => record.personId === selected);
     const dates = history.map(recordDate).filter(Boolean).sort();
@@ -241,7 +239,12 @@
     const shown = firstKnownDay > 0 ? days.slice(firstKnownDay) : days;
     const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，未入曲线。` : '';
     const trainingDays = shown.filter(day => day.total).length;
-    $('#chart-caption').textContent = shown.length ? `悬停 / 方向键查看日期 · Esc 关闭${undatedText ? ` · ${undatedText}` : ''}` : undatedText;
+    const frame = distributionFrame(records);
+    $('#chart').style?.setProperty('--chart-frame-height',`${frame.H}px`);
+    const trendCaption = shown.length ? `悬停 / 方向键查看日期 · Esc 关闭${undatedText ? ` · ${undatedText}` : ''}` : undatedText;
+    const distributionCaption = `用时（秒） / 组数 · 每档 0.10 秒 · 悬停查看详情${frame.histogram.sparse ? ' · 已省略空区间' : ''}`;
+    setChartMeta(trendCaption,distributionCaption,distribution);
+    if (distribution) { renderDistribution(frame); return; }
     if (!shown.length) {
       $('#chart').innerHTML = records.length ? `<div class="chart-empty"><strong>没有可用训练日期</strong>${escape(undatedText)}</div>` : '<div class="chart-empty"><strong>没有训练记录</strong>请切换统计范围，或回腾讯文档维护成绩后刷新。</div>';
       return;
@@ -293,6 +296,22 @@
     // Dates remain in hover details, not crowded labels below the curve.
     $('#chart').innerHTML = svg+'</svg><div class="trend-tooltip" role="tooltip" aria-live="polite" hidden></div>';
   }
+  function setChartMeta(trendCaption,distributionCaption,distribution) {
+    const caption = $('#chart-caption'), legend = $('#chart-legend'), meta = caption.parentElement;
+    if (meta?.getBoundingClientRect && meta.style) {
+      // Reserve only the larger natural caption/legend area at this width.
+      meta.style.removeProperty('--chart-meta-height');
+      legend.hidden = false;
+      caption.textContent = trendCaption;
+      const trendHeight = meta.getBoundingClientRect().height;
+      legend.hidden = true;
+      caption.textContent = distributionCaption;
+      const distributionHeight = meta.getBoundingClientRect().height;
+      meta.style.setProperty('--chart-meta-height',Math.ceil(Math.max(trendHeight,distributionHeight))+'px');
+    }
+    legend.hidden = distribution;
+    caption.textContent = distribution ? distributionCaption : trendCaption;
+  }
   function distributionLayout(bins,{W,L,R,baseT,plotHeight}) {
     const peak = bins.reduce((max,bin) => Math.max(max,bin.count),1), step = Math.max(1,Math.ceil(peak/4)), top = step*4;
     const slot = (W-L-R)/Math.max(1,bins.length), barWidth = Math.min(40,slot*.75);
@@ -316,8 +335,8 @@
     const headroom = Math.max(0,Math.ceil(44-countLabels.reduce((min,label) => Math.min(min,label.y),44)));
     return {step,top,slot,barWidth,x,baseY,countLabels,headroom};
   }
-  function renderDistribution(records) {
-    const histogram = C.histogram(records), {bins,valid,dnf,sparse} = histogram;
+  function distributionFrame(records) {
+    const histogram = C.histogram(records);
     // Reserve the same frame for every person at this range and viewport.
     // Other people's histograms determine spacing only, never displayed counts.
     const histograms = [histogram,...state.people.filter(person => person.id !== selected).map(person => C.histogram(recordsFor(person.id)))];
@@ -325,12 +344,17 @@
     const labelWidths = histograms.map(h => h.bins.reduce((max,bin) => Math.max(max,bin.start.toFixed(1).length),0)*8+12);
     const R = histograms.reduce((max,h,i) => Math.max(max,Math.ceil(labelWidths[i]/2),Math.ceil(h.bins.reduce((digits,bin) => Math.max(digits,String(bin.count).length),1)*9/2+4)),16);
     const tickRows = histograms.reduce((max,h,i) => Math.max(max,Math.min(h.bins.length,Math.ceil(labelWidths[i]*h.bins.length/(W-L-R)))),1);
-    const B = 22+tickRows*20, baseH = Math.max(218,baseT+90+B), plotHeight = baseH-baseT-B;
+    const minHeight = parseFloat(window.getComputedStyle?.($('#chart')).getPropertyValue('--chart-base-height')) || 218;
+    const B = 22+tickRows*20, baseH = Math.max(minHeight,baseT+90+B), plotHeight = baseH-baseT-B;
     const layouts = histograms.map(h => distributionLayout(h.bins,{W,L,R,baseT,plotHeight}));
     const headroom = layouts.reduce((max,layout) => Math.max(max,layout.headroom),0);
     const {step,top,slot,barWidth,x,baseY,countLabels} = layouts[0];
     const T = baseT+headroom, H = baseH+headroom, y = count => baseY(count)+headroom;
-    $('#chart-caption').textContent = `用时（秒） / 组数 · 每档 0.10 秒 · 悬停查看详情${sparse ? ' · 已省略空区间' : ''}`;
+    return {histogram,W,L,R,B,T,H,tickRows,plotHeight,step,top,slot,barWidth,x,countLabels,headroom,y};
+  }
+  function renderDistribution(frame) {
+    const {histogram,W,L,R,B,T,H,tickRows,plotHeight,step,top,slot,barWidth,x,countLabels,headroom,y} = frame;
+    const {bins,valid,dnf,sparse} = histogram;
     if (!valid) {
       $('#chart').innerHTML = `<div class="chart-empty" style="height:${H}px;display:grid;place-content:center"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组` : '请切换人员或统计范围。'}</div>`;
       return;
@@ -603,7 +627,7 @@
   window.addEventListener?.('resize',() => {
     hideTrendHover();
     positionCalendar();
-    if (chartMode === 'distribution' && view === 'personal' && selected) renderChart(recordsFor(selected));
+    if (view === 'personal' && selected) renderChart(recordsFor(selected));
   });
   setInterval(autoRead,60000);
   restoreFilter();

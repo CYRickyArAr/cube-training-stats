@@ -51,9 +51,9 @@ test('browser: every distribution count remains visible without overlaps after d
  try{
   await browser.start();const html=fs.readFileSync(path.join(root,'index.html'),'utf8').replace(/<script\b[^>]*>[\s\S]*?<\/script>/g,'').replace(/<link rel="stylesheet"[^>]*>/,()=>'<style>'+fs.readFileSync(path.join(root,'styles.css'),'utf8')+'</style>');const frame=(await browser.cdp('Page.getFrameTree')).frameTree.frame.id;await browser.cdp('Page.setDocumentContent',{frameId:frame,html});
   let id=0;const records=Array.from({length:34},(_,i)=>Array.from({length:i%7===0?0:i%3===0?17:13},()=>({id:'count'+(++id),personId:'p1',score:600+i*10,date:'2026-09-21',sourceRow:id+2,note:''}))).flat();
-  const extra=[...Array.from({length:125},(_,i)=>({id:'other'+i,personId:'p2',score:700,date:'2026-09-21',sourceRow:i+2,note:''})),{id:'dnf',personId:'p3',score:null,date:'2026-09-21',sourceRow:2,note:''}];
-  const payload={data:{version:1,people:['p1','p2','p3'].map(id=>({id,name:id})),records:[...records,...extra],warnings:[]},lastSuccessAt:new Date().toISOString(),stale:false,error:null};await browser.evaluate(fs.readFileSync(path.join(root,'core.js'),'utf8'));await browser.evaluate(`window.fetch=async()=>({ok:true,status:200,json:async()=>(${JSON.stringify(payload)})})`);await browser.evaluate(fs.readFileSync(path.join(root,'app.js'),'utf8'));await browser.evaluate(`new Promise(r=>setTimeout(r,30))`);await browser.evaluate(`document.querySelector('#histogram-chart-tab').click()`);
-  for(const width of [1366,768,390,320]){
+  const extra=[...Array.from({length:125},(_,i)=>({id:'other'+i,personId:'p2',score:700,date:'2026-09-21',sourceRow:i+2,note:''})),{id:'dnf',personId:'p3',score:null,date:'2026-09-21',sourceRow:2,note:''},{id:'undated',personId:'p5',score:610,date:null,at:null,sourceRow:2,note:''}];
+  const payload={data:{version:1,people:['p1','p2','p3','p4','p5'].map(id=>({id,name:id})),records:[...records,...extra],warnings:[]},lastSuccessAt:new Date().toISOString(),stale:false,error:null};await browser.evaluate(fs.readFileSync(path.join(root,'core.js'),'utf8'));await browser.evaluate(`window.fetch=async()=>({ok:true,status:200,json:async()=>(${JSON.stringify(payload)})})`);await browser.evaluate(fs.readFileSync(path.join(root,'app.js'),'utf8'));await browser.evaluate(`new Promise(r=>setTimeout(r,30))`);await browser.evaluate(`document.querySelector('#histogram-chart-tab').click()`);
+  for(const width of [1366,1024,768,390,320]){
    await browser.cdp('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<650});await browser.evaluate(`new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
    const layout=await browser.evaluate(`(()=>{const svg=document.querySelector('.distribution-svg'),rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom}},bars=[...svg.querySelectorAll('rect[data-bin]')].filter(e=>Number(e.dataset.count)>0);return {svg:rect(svg),overflow:document.documentElement.scrollWidth>innerWidth,bars:bars.map(e=>({...rect(e),count:Number(e.dataset.count)})),labels:[...svg.querySelectorAll('.distribution-count')].map(e=>({...rect(e),count:Number(e.textContent)})),summary:rect(svg.querySelector('text'))}})()`);
    assert.equal(layout.overflow,false);assert.equal(layout.labels.length,layout.bars.length);assert.equal(layout.labels.reduce((s,l)=>s+l.count,0),records.length);
@@ -62,6 +62,22 @@ test('browser: every distribution count remains visible without overlaps after d
    const frame=()=>browser.evaluate(`(()=>{const svg=document.querySelector('.distribution-svg'),c=document.querySelector('#chart'),r=c.getBoundingClientRect();return {height:r.height,top:svg?Number(svg.dataset.plotTop):null,bottom:svg?Number(svg.dataset.plotBottom):null,ticks:svg?Number(svg.dataset.tickRows):null}})()`);
    const expected=await frame();await browser.evaluate(`document.querySelector('#people-list [data-person="p2"]').click()`);assert.deepEqual(await frame(),expected,width+'px fixed frame across different distributions');assert.equal(await browser.evaluate(`document.querySelector('.distribution-count').textContent`),'125');
    await browser.evaluate(`document.querySelector('#people-list [data-person="p3"]').click()`);assert.equal((await frame()).height,expected.height,width+'px empty state retains height');await browser.evaluate(`document.querySelector('#people-list [data-person="p1"]').click()`);
+   const geometry=()=>browser.evaluate("(()=>{const rect=s=>{const r=document.querySelector(s).getBoundingClientRect();return {top:r.top,bottom:r.bottom,left:r.left,width:r.width,height:r.height}};return {chart:rect('#chart'),card:rect('.chart-card'),meta:rect('.chart-meta'),analysis:rect('.analysis-card'),row:rect('.overview-grid'),history:rect('.history-card'),overflow:document.documentElement.scrollWidth>innerWidth}})()");
+   for(const range of ['0','empty-day']){
+    await browser.evaluate("document.querySelector('#range').value="+JSON.stringify(range==='0'?'0':'day')+";document.querySelector('#range').dispatchEvent(new Event('change',{bubbles:true}));if("+JSON.stringify(range)+"==='empty-day'){document.querySelector('#range-date').value='2026-09-22';document.querySelector('#range-date').dispatchEvent(new Event('change',{bubbles:true}));}");
+    for(const person of ['p1','p2','p3','p4','p5']){
+     await browser.evaluate("document.querySelector('#people-list [data-person=\""+person+"\"]').click()");
+     const anchor=await geometry();
+     for(const mode of ['trend','histogram','trend','histogram']){
+      await browser.evaluate("document.querySelector('#"+mode+"-chart-tab').click();new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))");
+      const current=await geometry();assert.equal(current.overflow,false);
+      for(const region of ['chart','card','meta','analysis','row','history'])for(const axis of ['top','bottom','height','left','width'])assert.ok(Math.abs(current[region][axis]-anchor[region][axis])<.01,width+'px '+person+'/'+range+' '+region+'.'+axis+' remains fixed when switching chart modes');
+     }
+    }
+   }
+   await browser.evaluate("document.querySelector('#range').value='0';document.querySelector('#range').dispatchEvent(new Event('change',{bubbles:true}));document.querySelector('#people-list [data-person=\"p1\"]').click();document.querySelector('#histogram-chart-tab').click()");
+   console.log(JSON.stringify({width,stableModeGeometry:true,scenarios:['dense','single-bin','DNF-only','empty','undated','empty-day']}));
+
   }
  }finally{await browser.close();}
 });
