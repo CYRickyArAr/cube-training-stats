@@ -78,5 +78,17 @@ test('daily trend follows date/person/range filters; distribution and personal m
  const ui=boot(records);await ui.flush();assert.equal(count(ui),11);assert.match(ui.get('chart-caption').textContent,/1 组日期未标注/);assert.equal(ui.get('record-count').textContent,331);
  ui.range('day','2026-09-30');assert.equal(ui.get('histogram-chart-tab').attrs['aria-pressed'],true);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="700"/);assert.equal(ui.get('metric-mean').textContent,'7.00');ui.range('7');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-carried="true"/g)||[]).length,6);
  ui.get('histogram-chart-tab').dispatch('click');assert.equal([...ui.chart().matchAll(/data-count="(\d+)"/g)].reduce((sum,m)=>sum+Number(m[1]),0),130);ui.get('trend-chart-tab').dispatch('click');assert.equal(count(ui),7);
- ui.person('p2');assert.equal(count(ui),7);assert.equal((ui.chart().match(/data-mean=""/g)||[]).length,6,'no backfill before the first-ever training day');assert.match(ui.chart(),/data-mean="800"/);ui.update([make(600,2,'2026-09-30','p2'),make(650,3,'2026-09-30','p2')]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(count(ui),7);assert.match(ui.chart(),/data-mean="625"/);assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],true);
+ ui.person('p2');assert.equal(count(ui),1);assert.equal((ui.chart().match(/data-mean=""/g)||[]).length,0,'leading days before the first-ever training day do not compress the plot');assert.match(ui.chart(),/data-mean="800"/);ui.update([make(600,2,'2026-09-30','p2'),make(650,3,'2026-09-30','p2')]);ui.get('refresh-data').dispatch('click');await ui.flush();assert.equal(count(ui),1);assert.match(ui.chart(),/data-mean="625"/);assert.equal(ui.get('trend-chart-tab').attrs['aria-pressed'],true);
+});
+
+
+test('long ranges use available history across the plot while retaining DNF dates, interior gaps and carried means',async()=>{
+ const records=[make(null,2,'2026-09-20'),make(600,2,'2026-09-21'),make(null,2,'2026-09-23'),make(700,2,'2026-09-30')];
+ const ui=boot(records);await ui.flush();const allMean=ui.get('metric-mean').textContent;ui.range('90');
+ assert.equal(count(ui),11);assert.equal(ui.get('metric-mean').textContent,allMean);assert.equal(ui.get('record-count').textContent,4);
+ assert.ok(ui.chart().includes('data-date="2026-09-20"'));assert.ok(ui.chart().includes('data-date="2026-09-23"'));assert.ok(ui.chart().includes('data-date="2026-09-24"'));
+ const hits=[...ui.chart().matchAll(/data-plot-x="([\d.]+)"/g)].map(m=>Number(m[1]));assert.equal(hits[0],72);assert.equal(hits.at(-1),735);
+ assert.equal((pathData(ui).match(/M/g)||[]).length,2,'the all-DNF training day still breaks the line');
+ const carried=boot([make(600,2,'2026-09-20'),make(700,2,'2026-09-30')]);await carried.flush();carried.range('7');assert.equal(count(carried),7);assert.equal((carried.chart().match(/data-carried="true"/g)||[]).length,6);
+ const empty=boot([]);await empty.flush();empty.range('90');assert.equal(count(empty),90);assert.equal(pathData(empty),'');
 });

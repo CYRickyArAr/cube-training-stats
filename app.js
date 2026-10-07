@@ -235,7 +235,10 @@
     const dates = history.map(recordDate).filter(Boolean).sort();
     const endDate = mode === 'day' ? $('#range-date').value : mode === '0' && dates.at(-1) > today ? dates.at(-1) : today;
     const startDate = mode === 'day' ? endDate : mode === '0' ? dates[0] : new Date(Date.parse(today+'T00:00:00Z')-(Number(mode)-1)*86400000).toISOString().slice(0,10);
-    const {days:shown,undatedRecords} = C.dailyTrend(history,{startDate,endDate});
+    const {days,undatedRecords} = C.dailyTrend(history,{startDate,endDate});
+    // Skip only leading days with no training history or available mean.
+    const firstKnownDay = days.findIndex(day => day.total || day.mean !== null);
+    const shown = firstKnownDay > 0 ? days.slice(firstKnownDay) : days;
     const undatedText = mode === '0' && undatedRecords ? `${undatedRecords} 组日期未标注，未入曲线。` : '';
     const trainingDays = shown.filter(day => day.total).length;
     $('#chart-caption').textContent = shown.length ? `悬停 / 方向键查看日期 · Esc 关闭${undatedText ? ` · ${undatedText}` : ''}` : undatedText;
@@ -339,7 +342,7 @@
     }
     svg += `<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#d4d4d4"/>`;
     bins.forEach((bin,i) => {
-      const title = `${bin.label} 秒（${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
+      const title = `${bin.label} 秒 · （${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
       svg += `<g class="distribution-hit" data-bin-index="${i}" data-tooltip="${escape(title)}" data-plot-x="${x(i)}" data-plot-y="${y(bin.count)}" aria-label="${escape(title)}"><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="4" fill="#0070f3"/>`;
       // A full-column hover target also exposes zero-count bins.
       svg += `<rect x="${L+i*slot}" y="${T}" width="${slot}" height="${plotHeight}" fill="transparent"/></g>`;
