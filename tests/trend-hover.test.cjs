@@ -34,5 +34,22 @@ test('browser hover shows exactly one anchored dot and tooltip, handles gaps, to
   await key('Home');await browser.evaluate(`document.querySelector('#refresh-data').click();new Promise(r=>setTimeout(r,30))`);assert.equal((await state()).hidden,true);
   await key('Home');await browser.evaluate(`window.dispatchEvent(new Event('resize'))`);assert.equal((await state()).hidden,true);
   await key('Home');await browser.evaluate(`document.querySelector('#stats-main').dispatchEvent(new Event('scroll'))`);assert.equal((await state()).hidden,true);
+  await browser.evaluate(`document.querySelector('#people-list [data-person="a"]').click();document.querySelector('#histogram-chart-tab').click()`);
+  const distributionHover=i=>browser.evaluate(`(()=>{const hit=document.querySelectorAll('#chart .distribution-hit')[${i}];hit.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,pointerType:'mouse'}));const tooltip=document.querySelector('#chart .trend-tooltip');return {hidden:tooltip.hidden,text:tooltip.textContent,nativeTitle:!!hit.querySelector('title')};})()`);
+  for(const [width,height] of [[1366,768],[390,844],[320,844]]){
+   await browser.cdp('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<650});await browser.evaluate(`document.querySelector('#chart').scrollIntoView({block:'center'});new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)))`);
+   for(const [index,interval,count,rate] of [[0,'6.00–6.09',1,'33.3%'],[1,'6.10–6.19',0,'0.0%'],[20,'8.00–8.09',1,'33.3%']]){
+    const immediate=await distributionHover(index);assert.equal(immediate.hidden,false,'same pointer event shows tooltip without a delay');assert.equal(immediate.nativeTitle,false,'no competing native bar tooltip');assert.ok(immediate.text.includes(interval));assert.ok(immediate.text.includes(count+' 组'));assert.ok(immediate.text.includes(rate));
+    const s=await state();assert.equal(s.dots,0);assert.ok(s.tooltip.left>=s.chart.left-1&&s.tooltip.right<=s.chart.right+1,width+'px tooltip fits horizontally');assert.ok(s.tooltip.top>=s.chart.top-1&&s.tooltip.bottom<=s.chart.bottom+1,width+'px tooltip fits vertically');
+   }
+   const cards=await browser.evaluate(`[...document.querySelectorAll('.metric')].map(card=>({height:card.getBoundingClientRect().height,extra:[...card.querySelectorAll('small')].some(e=>!e.hidden),bottom:getComputedStyle(card.querySelector('strong')).marginBottom}))`);assert.equal(cards.length,4);for(const card of cards){assert.equal(card.extra,false,'normal metric cards show only label and value');assert.equal(card.bottom,'0px');assert.ok(Math.abs(card.height-cards[0].height)<1,'four cards have equal compact height');}
+   await browser.evaluate(`document.querySelector('#chart').dispatchEvent(new PointerEvent('pointerleave',{pointerType:'mouse'}))`);assert.equal((await state()).hidden,true);
+  }
+  await key('Home');assert.match((await state()).text,/6.00–6.09/);await key('ArrowRight');assert.match((await state()).text,/6.10–6.19/);await key('End');assert.match((await state()).text,/8.00–8.09/);await key('Escape');assert.equal((await state()).hidden,true);
+  await browser.evaluate(`document.querySelector('#chart .distribution-hit').dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch'}))`);assert.equal((await state()).hidden,false);await browser.evaluate(`document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch'}))`);assert.equal((await state()).hidden,true);
+  await distributionHover(0);await browser.evaluate(`document.querySelector('#chart').dispatchEvent(new FocusEvent('focusout',{bubbles:true}))`);assert.equal((await state()).hidden,true);
+  await distributionHover(0);await browser.evaluate(`document.querySelector('#stats-main').dispatchEvent(new Event('scroll'))`);assert.equal((await state()).hidden,true);
+  await distributionHover(0);await browser.evaluate(`window.dispatchEvent(new Event('resize'))`);assert.equal((await state()).hidden,true);
+  await distributionHover(0);await browser.evaluate(`document.querySelector('#trend-chart-tab').click()`);assert.equal((await state()).hidden,true);
  }finally{await browser.close();}
 });

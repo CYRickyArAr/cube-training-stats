@@ -159,7 +159,8 @@
     $('#metric-mean').textContent = time(stats.mean);
     $('#metric-median').textContent = time(stats.median);
     $('#metric-sub7').textContent = percentage(stats.sub7Rate);
-    $('#sub7-caption').textContent = stats.total ? `${stats.sub7Count} / ${stats.total} 组 < 7 秒，DNF 未达标` : '当前范围暂无 ao5 记录';
+    $('#sub7-caption').hidden = !!stats.total;
+    $('#sub7-caption').textContent = stats.total ? '' : '当前范围暂无 ao5 记录';
     renderChart(records);
     const trendDate = $('#range').value === 'day' ? $('#range-date').value : records.map(recordDate).filter(Boolean).sort().at(-1) || '';
     renderAnalysis(stats,C.dailyComparison(state.records,person.id,trendDate));
@@ -195,6 +196,10 @@
       point.setAttribute('r',5/Math.hypot(matrix.a,matrix.b));
     } else point?.remove();
     const anchor = new DOMPoint(Number(hit.dataset.plotX),hasMean ? Number(hit.dataset.plotY) : 150).matrixTransform(matrix);
+    positionChartTooltip(tooltip,anchor);
+  }
+  function positionChartTooltip(tooltip,anchor) {
+    const chart = $('#chart');
     const bounds = chart.getBoundingClientRect();
     tooltip.style.maxWidth = Math.min(280,Math.max(0,bounds.width-16))+'px';
     const width = tooltip.offsetWidth, height = tooltip.offsetHeight;
@@ -203,6 +208,18 @@
     if (left+width > bounds.width-8) left = px-width-12;
     tooltip.style.left = Math.max(8,Math.min(left,bounds.width-width-8))+'px';
     tooltip.style.top = Math.max(8,Math.min(py-height/2,bounds.height-height-8))+'px';
+  }
+  function showDistributionHover(hit) {
+    const chart = $('#chart'), svg = hit?.ownerSVGElement, tooltip = chart.querySelector?.('.trend-tooltip');
+    if (!svg || !tooltip || chartMode !== 'distribution') return hideTrendHover();
+    if (trendHoverIndex === Number(hit.dataset.binIndex) && !tooltip.hidden) return;
+    const matrix = svg.getScreenCTM();
+    if (!matrix) return;
+    trendHoverIndex = Number(hit.dataset.binIndex);
+    const [interval,...details] = (hit.dataset.tooltip || '').split(' · ');
+    tooltip.innerHTML = `<strong>${escape(interval)}</strong>${details.map(text => `<span>${escape(text)}</span>`).join('')}`;
+    tooltip.hidden = false;
+    positionChartTooltip(tooltip,new DOMPoint(Number(hit.dataset.plotX),Number(hit.dataset.plotY)).matrixTransform(matrix));
   }
   function renderChart(records) {
     trendHoverIndex = -1;
@@ -315,7 +332,7 @@
       $('#chart').innerHTML = `<div class="chart-empty" style="height:${H}px;display:grid;place-content:center"><strong>${dnf ? '当前范围只有 DNF，没有用时分布' : '没有训练记录'}</strong>${dnf ? `DNF ${dnf} 组` : '请切换人员或统计范围。'}</div>`;
       return;
     }
-    let svg = `<svg class="distribution-svg" data-plot-top="${T}" data-plot-bottom="${H-B}" data-tick-rows="${tickRows}" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱"><title>ao5 用时分布</title><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
+    let svg = `<svg class="distribution-svg" data-plot-top="${T}" data-plot-bottom="${H-B}" data-tick-rows="${tickRows}" style="width:100%;height:${H}px" preserveAspectRatio="none" viewBox="0 0 ${W} ${H}" role="img" tabindex="0" aria-label="ao5 用时分布：每档 0.10 秒，${valid} 组有效，DNF ${dnf} 组不入柱；方向键查看区间，Esc 关闭提示"><desc>横轴用时区间（秒），纵轴组数；按原始精度统计当前筛选范围全部有效记录，DNF 单独计数。${sparse ? '长段空区间省略；非连续档之间标记断档。' : ''}</desc><text x="${L}" y="20" fill="#737373">有效 ${valid} 组 · DNF ${dnf} 组（不入柱）</text>`;
     for (let i=0;i<=4;i++) {
       const count = i*step, yy = y(count);
       svg += `<line x1="${L}" y1="${yy}" x2="${W-R}" y2="${yy}" stroke="#ededed"/><text x="${L-10}" y="${yy+5}" text-anchor="end" fill="#737373">${count}</text>`;
@@ -323,7 +340,7 @@
     svg += `<line x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}" stroke="#d4d4d4"/>`;
     bins.forEach((bin,i) => {
       const title = `${bin.label} 秒（${bin.start.toFixed(2)} ≤ 用时 < ${bin.endExclusive.toFixed(2)}） · ${bin.count} 组 · 占有效组 ${(bin.count/valid*100).toFixed(1)}%`;
-      svg += `<g><title>${escape(title)}</title><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="4" fill="#0070f3"/>`;
+      svg += `<g class="distribution-hit" data-bin-index="${i}" data-tooltip="${escape(title)}" data-plot-x="${x(i)}" data-plot-y="${y(bin.count)}" aria-label="${escape(title)}"><rect data-bin="${bin.index}" data-count="${bin.count}" x="${x(i)-barWidth/2}" y="${y(bin.count)}" width="${barWidth}" height="${bin.count/top*plotHeight}" rx="4" fill="#0070f3"/>`;
       // A full-column hover target also exposes zero-count bins.
       svg += `<rect x="${L+i*slot}" y="${T}" width="${slot}" height="${plotHeight}" fill="transparent"/></g>`;
       if (sparse && i && bin.index-bins[i-1].index > 1) svg += `<text x="${L+i*slot}" y="${H-B-4}" text-anchor="middle" fill="#737373"><title>省略 ${(bin.index-bins[i-1].index-1)} 个无记录区间</title>⋯</text>`;
@@ -339,7 +356,7 @@
       const yy = label.y+headroom, {bin} = label;
       svg += `<g><title>${escape(bin.label)} 秒 · ${bin.count} 组</title><text class="distribution-count" data-count-bin="${bin.index}" x="${label.x}" y="${yy}" text-anchor="middle" fill="#171717" paint-order="stroke" stroke="#fff" stroke-width="3" stroke-linejoin="round">${bin.count}</text></g>`;
     }
-    $('#chart').innerHTML = svg+'</svg>';
+    $('#chart').innerHTML = svg+'</svg><div class="trend-tooltip" role="tooltip" aria-live="polite" hidden></div>';
   }
   function renderAnalysis(stats, change) {
     const {current,previous} = change;
@@ -545,9 +562,9 @@
     if (calendarOpen && event.key === 'Escape') { event.preventDefault(); closeCalendar(true); }
   });
   $('#stats-main').addEventListener('scroll',() => {positionCalendar(); hideTrendHover();});
-  for (const type of ['pointermove','pointerdown']) $('#chart').addEventListener(type,event => {
-    const hit = event.target.closest?.('.trend-hit');
-    if (hit) showTrendHover(hit);
+  for (const type of ['pointerover','pointermove','pointerdown']) $('#chart').addEventListener(type,event => {
+    const hit = event.target.closest?.(chartMode === 'distribution' ? '.distribution-hit' : '.trend-hit');
+    if (hit) (chartMode === 'distribution' ? showDistributionHover : showTrendHover)(hit);
     else hideTrendHover();
   });
   $('#chart').addEventListener('pointerleave',event => {if (event.pointerType !== 'touch') hideTrendHover();});
@@ -555,12 +572,12 @@
   $('#chart').addEventListener('focusout',hideTrendHover);
   $('#chart').addEventListener('keydown',event => {
     if (event.key === 'Escape') { hideTrendHover(); return; }
-    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key) || chartMode !== 'trend') return;
-    const hits = $('#chart').querySelectorAll('.trend-hit');
+    if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+    const hits = $('#chart').querySelectorAll(chartMode === 'distribution' ? '.distribution-hit' : '.trend-hit');
     if (!hits.length) return;
     event.preventDefault();
     const index = event.key === 'Home' ? 0 : event.key === 'End' ? hits.length-1 : trendHoverIndex < 0 ? (event.key === 'ArrowLeft' ? hits.length-1 : 0) : Math.max(0,Math.min(hits.length-1,trendHoverIndex+(event.key === 'ArrowLeft' ? -1 : 1)));
-    showTrendHover(hits[index]);
+    (chartMode === 'distribution' ? showDistributionHover : showTrendHover)(hits[index]);
   });
   document.addEventListener('pointerdown',event => {if (!event.target.closest?.('#chart')) hideTrendHover();});
   for (const [id,mode] of [['trend-chart-tab','trend'],['histogram-chart-tab','distribution']]) {
