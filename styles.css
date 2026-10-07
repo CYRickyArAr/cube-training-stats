@@ -162,3 +162,5 @@ td.competition-leading{color:var(--blue)}
 .chart-meta .legend{white-space:normal}
 .chart-caption{padding:0;line-height:1.4;color:var(--muted)}
 .chart-caption:empty{display:none}
+
+.analysis-item p.analysis-help{font-size:14px;line-height:1.4}
