@@ -48,14 +48,29 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Install pinned artifact metadata client
+        run: npm ci --prefix .github/pages-artifact --ignore-scripts --no-audit --no-fund
       - uses: actions/download-artifact@v8
         with:
           name: safe-statistics
           path: public
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
+        id: pages_artifact
         with:
           path: public
+      - name: Wait for this run Pages artifact and reject older snapshots
+        env:
+          PAGES_ARTIFACT_ID: ${{ steps.pages_artifact.outputs.artifact_id }}
+        # JavaScript actions receive the artifact service runtime credentials;
+        # ordinary shell steps do not. Never export those credentials to GITHUB_ENV.
+        uses: ./.github/pages-artifact
       - name: Deploy safe snapshot
         id: deployment
         uses: actions/deploy-pages@v5

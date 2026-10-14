@@ -1,0 +1,1 @@
+{"name":"pages-artifact-preflight","private":true,"version":"1.0.0","dependencies":{"@actions/artifact":"2.1.8"}}

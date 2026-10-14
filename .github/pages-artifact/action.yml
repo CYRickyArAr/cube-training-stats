@@ -1,0 +1,5 @@
+name: Verify Pages artifact readiness
+description: Wait for this run's exact Pages artifact using action-scoped runtime credentials.
+runs:
+  using: node24
+  main: wait.cjs

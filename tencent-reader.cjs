@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('node:fs');const path=require('node:path');const os=require('node:os');
 const {spawn}=require('node:child_process');const {SourceFailure}=require('./source-errors.cjs');
+const {assertOwnedProfile,processRequest,removeProfile}=require('./browser-processes.cjs');
 const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const RUNTIME_ROOT=process.env.CUBE_RUNTIME_DIR||path.join(os.homedir(),'AppData','Local','hermes','cache','scratch','cube-stats-runtime');
 function findEdge(){
@@ -15,26 +16,32 @@ function parseDevToolsActivePort(text){
  const [port,browserPath]=String(text).trim().split(/\r?\n/);
  return /^\d+$/.test(port)&&Number(port)>0&&Number(port)<=65535&&/^\/devtools\/browser\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(browserPath)?port:null;
 }
-function startupFailure(error){
- return new SourceFailure(['EACCES','EPERM'].includes(error?.code)?'BROWSER_PERMISSION_DENIED':error?.code==='ENOENT'?'BROWSER_MISSING':error?.code==='EAGAIN'?'BROWSER_RESOURCE_BUSY':'BROWSER_START_FAILED');
+function startupFailure(error,operation='spawn'){
+ const osCode=error?.code||'UNKNOWN';
+ const temporary=['EAGAIN','ENOMEM','EMFILE','ENFILE',...(operation==='active_port_read'?['EBUSY','ETXTBSY']:[])].includes(osCode);
+ return new SourceFailure(['EACCES','EPERM'].includes(osCode)?'BROWSER_PERMISSION_DENIED':osCode==='ENOENT'?'BROWSER_MISSING':temporary?'BROWSER_RESOURCE_BUSY':'BROWSER_START_FAILED','browser_start',0,{operation,osCode});
+}
+function launcherFailure(exitCode,signal){
+ const unsigned=Number.isInteger(exitCode)?exitCode>>>0:null;
+ return new SourceFailure([0xc0000017,0xc000009a].includes(unsigned)?'BROWSER_RESOURCE_BUSY':'BROWSER_START_FAILED','browser_start',0,{operation:'launcher_exit',exitCode,signal});
 }
 function contextLost(text){return /Execution context was destroyed|Cannot find context with specified id|Inspected target navigated or closed|Target closed/i.test(String(text));}
 class TencentReader{
- constructor({runtimeRoot=RUNTIME_ROOT,browserPath,signal}={}){this.runtimeRoot=runtimeRoot;this.browserPath=browserPath;this.signal=signal;this.phase='browser_start';this.browser=null;this.socket=null;this.pending=new Map();this.sequence=0;this.starting=null;this.profile=null;}
+ constructor({runtimeRoot=RUNTIME_ROOT,browserPath,signal,processControl=processRequest,profileRemoval=removeProfile,onDiagnostic=()=>{}}={}){this.processControl=processControl;this.profileRemoval=profileRemoval;this.onDiagnostic=onDiagnostic;this.runtimeRoot=runtimeRoot;this.browserPath=browserPath;this.signal=signal;this.phase='browser_start';this.browser=null;this.socket=null;this.pending=new Map();this.sequence=0;this.starting=null;this.profile=null;}
  checkAbort(){if(this.signal?.aborted)throw new SourceFailure('READ_ATTEMPT_TIMEOUT',this.phase);}
  async start(){if(this.socket?.readyState===1)return;if(this.starting)return this.starting;this.starting=this._start();try{await this.starting;}finally{this.starting=null;}}
  async _start(){
   this.phase='browser_start';this.checkAbort();await this.close();this.checkAbort();
-  let edge;try{fs.mkdirSync(this.runtimeRoot,{recursive:true});this.profile=fs.mkdtempSync(path.join(this.runtimeRoot,'reader-'));edge=this.browserPath||findEdge();this.browser=spawn(edge,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-extensions','--remote-debugging-port=0','--user-data-dir='+this.profile,'about:blank'],{stdio:'ignore'});}
-  catch(error){if(error instanceof SourceFailure)throw error;throw startupFailure(error);}
+  let edge,operation='runtime_directory';try{fs.mkdirSync(this.runtimeRoot,{recursive:true});this.profile=fs.mkdtempSync(path.join(this.runtimeRoot,'reader-'));edge=this.browserPath||findEdge();operation='spawn';this.browser=spawn(edge,['--headless=new','--disable-gpu','--no-first-run','--no-default-browser-check','--disable-extensions','--remote-debugging-port=0','--user-data-dir='+this.profile,'about:blank'],{stdio:'ignore',windowsHide:true});}
+  catch(error){if(error instanceof SourceFailure)throw error;throw startupFailure(error,operation);}
   let startupError=null;this.browser.once('error',error=>{startupError=error;});let port=null;
   for(let i=0;i<200;i++){
    this.checkAbort();if(startupError)throw startupFailure(startupError);
    // Edge's launcher may exit successfully while a child owns the browser.
-   if(this.browser.exitCode!==null&&this.browser.exitCode!==0)throw new SourceFailure('BROWSER_START_FAILED');
+   if(this.browser.signalCode||this.browser.exitCode!==null&&this.browser.exitCode!==0)throw launcherFailure(this.browser.exitCode,this.browser.signalCode);
    const activeFile=path.join(this.profile,'DevToolsActivePort');
-   try{if(fs.existsSync(activeFile))port=parseDevToolsActivePort(fs.readFileSync(activeFile,'utf8'));}
-   catch(error){if(error.code!=='ENOENT')throw startupFailure(error);}
+   try{port=parseDevToolsActivePort(fs.readFileSync(activeFile,'utf8'));}
+   catch(error){if(error.code!=='ENOENT')throw startupFailure(error,'active_port_read');}
    if(port)break;await wait(100);
   }
   if(!port)throw new SourceFailure('BROWSER_START_TIMEOUT');this.phase='browser_connect';this.checkAbort();
@@ -98,14 +105,23 @@ class TencentReader{
  async close(){
   const previousPhase=this.phase;this.phase='cleanup';const browser=this.browser,socket=this.socket,profile=this.profile;
   try{
-   if(socket){if(socket.readyState===1){try{await this.cdp('Browser.close');}catch{}}try{socket.close();}catch{}}
-   this.socket=null;this.browser=null;for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(new SourceFailure('DEBUG_SOCKET_DISCONNECTED',task.phase));}this.pending.clear();
-   if(browser&&browser.exitCode===null){
-    await new Promise(resolve=>{const timer=setTimeout(resolve,1500);browser.once('exit',()=>{clearTimeout(timer);resolve();});});
-    if(browser.exitCode===null)await new Promise((resolve,reject)=>{const killer=spawn('taskkill.exe',['/PID',String(browser.pid),'/T','/F'],{stdio:'ignore'});const timer=setTimeout(()=>{killer.kill();reject(new SourceFailure('READER_CLEANUP_FAILED'));},5000);killer.once('exit',code=>{clearTimeout(timer);if(code&&browser.exitCode===null)reject(new SourceFailure('READER_CLEANUP_FAILED'));else resolve();});killer.once('error',()=>{clearTimeout(timer);reject(new SourceFailure('READER_CLEANUP_FAILED'));});});
+   let target,captured;
+   if(profile){
+    target=assertOwnedProfile(profile,this.runtimeRoot);
+    captured=await this.processControl({mode:'capture',profile:target,launcherPid:browser?.exitCode===null?browser.pid:null});
+    if(!Array.isArray(captured?.proofs))throw new SourceFailure('READER_PROCESS_UNCONFIRMED','cleanup',0,{operation:'process_inventory'});
    }
-   if(profile){const target=path.resolve(profile),root=path.resolve(this.runtimeRoot);const norm=value=>process.platform==='win32'?value.toLowerCase():value;if(!norm(target).startsWith(norm(root+path.sep))||!path.basename(target).startsWith('reader-'))throw new SourceFailure('READER_CLEANUP_FAILED');fs.rmSync(target,{recursive:true,force:true,maxRetries:5,retryDelay:200});this.profile=null;}
-  }catch{throw new SourceFailure('READER_CLEANUP_FAILED');}finally{this.phase=previousPhase;}
+   if(socket){if(socket.readyState===1){try{await this.cdp('Browser.close');}catch{}}try{socket.close();}catch{}}
+   this.socket=null;for(const task of this.pending.values()){clearTimeout(task.timer);task.reject(new SourceFailure('DEBUG_SOCKET_DISCONNECTED',task.phase));}this.pending.clear();
+   if(target){
+    const settled=await this.processControl({mode:'settle',profile:target,proofs:captured.proofs});
+    if(settled?.remaining!==0)throw new SourceFailure('READER_PROCESS_UNCONFIRMED','cleanup',0,{operation:'process_termination'});
+    this.onDiagnostic({event:'browser_cleanup_complete',stage:'cleanup',code:'BROWSER_STOPPED',terminated:Number.isInteger(settled.terminated)?settled.terminated:0});
+    await this.profileRemoval(target,{onDiagnostic:this.onDiagnostic});this.profile=null;
+   }
+   this.browser=null;
+  }catch(error){if(error instanceof SourceFailure)throw error;throw new SourceFailure('READER_CLEANUP_FAILED','cleanup');}finally{this.phase=previousPhase;}
  }
+
 }
-module.exports={TencentReader,assertSource,RUNTIME_ROOT,parseDevToolsActivePort};
+module.exports={TencentReader,assertSource,RUNTIME_ROOT,parseDevToolsActivePort,startupFailure,launcherFailure};

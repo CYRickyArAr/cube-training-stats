@@ -53,9 +53,9 @@ function publicPayload(data,source,at=new Date().toISOString()){
   const payload={data:{version:1,people,records,warnings,source:safeSource},source:safeSource,lastSuccessAt:at,attemptedAt:at,refreshing:false,stale:false,error:null,syncIntervalMs:60000};
   assertSafe(JSON.stringify(payload),source);return payload;
 }
-const READ_POLICY=Object.freeze({maxAttempts:3,attemptTimeoutMs:90000,totalTimeoutMs:180000,cleanupTimeoutMs:10000,retryDelaysMs:[1000,3000]});
+const READ_POLICY=Object.freeze({maxAttempts:3,attemptTimeoutMs:90000,totalTimeoutMs:180000,cleanupTimeoutMs:30000,retryDelaysMs:[1000,3000]});
 function emit(log,event,failure,attempt,elapsedMs,willRetry=false){
- const safe=failureFrom(failure);log(JSON.stringify({event,stage:safe.stage,code:safe.code,attempt,maxAttempts:READ_POLICY.maxAttempts,elapsedMs:Math.max(0,Math.round(elapsedMs)),willRetry}));
+ const safe=failureFrom(failure);log(JSON.stringify({event,stage:safe.stage,code:safe.code,attempt,maxAttempts:READ_POLICY.maxAttempts,elapsedMs:Math.max(0,Math.round(elapsedMs)),willRetry,...safe.diagnostic}));
 }
 function bounded(promise,ms,failure,onTimeout){
  let timer;const limit=new Promise((resolve,reject)=>{timer=setTimeout(()=>{reject(failure);onTimeout?.(failure);},Math.max(1,ms));});
@@ -66,13 +66,17 @@ async function readWithRetries(source,{readerFactory=options=>new TencentReader(
  const started=now(),deadline=started+p.totalTimeoutMs;
  for(let attempt=1;attempt<=p.maxAttempts;attempt++){
   const remaining=deadline-now();if(remaining<=0)throw new SourceFailure('READ_TOTAL_TIMEOUT','source_read',attempt-1);
-  const controller=new AbortController();let reader,raw,failure;
+  const controller=new AbortController();let reader,raw,failure,cleanupFailure;
   try{
-   reader=readerFactory({signal:controller.signal});
+   reader=readerFactory({signal:controller.signal,onDiagnostic:entry=>log(JSON.stringify({...entry,attempt,maxAttempts:p.maxAttempts,elapsedMs:Math.max(0,Math.round(now()-started))}))});
    raw=await bounded(Promise.resolve().then(()=>reader.read(source)),Math.min(p.attemptTimeoutMs,remaining),new SourceFailure('READ_ATTEMPT_TIMEOUT','source_read',attempt),error=>controller.abort(error));
   }catch(error){failure=failureFrom(error,'UNCLASSIFIED_READ_ERROR',reader?.phase||'source_read',attempt);}
   finally{
-   if(reader){try{await bounded(Promise.resolve().then(()=>reader.close()),p.cleanupTimeoutMs,new SourceFailure('READER_CLEANUP_FAILED','cleanup',attempt));}catch{failure=new SourceFailure('READER_CLEANUP_FAILED','cleanup',attempt);}}
+   if(reader){try{await bounded(Promise.resolve().then(()=>reader.close()),p.cleanupTimeoutMs,new SourceFailure('READER_CLEANUP_FAILED','cleanup',attempt));}catch(error){cleanupFailure=failureFrom(error,'READER_CLEANUP_FAILED','cleanup',attempt);}}
+  }
+  if(cleanupFailure){
+   if(failure)emit(log,'read_attempt_failed',failure,attempt,now()-started,false);
+   emit(log,'reader_cleanup_failed',cleanupFailure,attempt,now()-started,false);throw cleanupFailure;
   }
   if(!failure){if(now()>deadline)throw new SourceFailure('READ_TOTAL_TIMEOUT','source_read',attempt);log(JSON.stringify({event:attempt>1?'read_recovered':'read_succeeded',stage:'source_read',code:'READ_OK',attempt,maxAttempts:p.maxAttempts,elapsedMs:Math.max(0,Math.round(now()-started))}));return raw;}
   const delay=p.retryDelaysMs[attempt-1]??0;

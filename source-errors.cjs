@@ -23,6 +23,9 @@ const RULES=Object.freeze({
  READ_ATTEMPT_TIMEOUT:['source_read',true,'本次读取超时。'],
  READ_TOTAL_TIMEOUT:['source_read',false,'读取总时限已用尽。'],
  READER_CLEANUP_FAILED:['cleanup',false,'读取器清理失败。'],
+ READER_PROCESS_UNCONFIRMED:['cleanup',false,'无法确认读取浏览器进程已终止。'],
+ READER_PROCESS_TERMINATION_FAILED:['cleanup',false,'读取浏览器进程终止失败。'],
+ READER_PROFILE_BUSY:['cleanup',false,'读取器目录持续被占用。'],
  UNCLASSIFIED_READ_ERROR:['source_read',false,'读取失败，原因尚未分类。'],
  DATA_INVALID:['conversion',false,'数据转换校验失败。'],
  PRIVACY_BLOCKED:['privacy',false,'Publication blocked: private source information detected.'],
@@ -30,14 +33,23 @@ const RULES=Object.freeze({
  OUTPUT_FAILED:['output',false,'公开快照写入失败。'],
 });
 const STAGES=new Set(Object.values(RULES).map(rule=>rule[0]));
+const OPERATIONS=new Set(['runtime_directory','spawn','launcher_exit','active_port_read','process_inventory','process_termination','profile_remove']);
+const OS_CODES=new Set(['EACCES','EPERM','ENOENT','EAGAIN','EBUSY','ETXTBSY','ENOTEMPTY','EMFILE','ENFILE','ENOMEM','ENOSPC','EIO','UNKNOWN']);
+function safeDiagnostic(value={}){
+ const out={};if(OPERATIONS.has(value.operation))out.operation=value.operation;
+ if(OS_CODES.has(value.osCode))out.osCode=value.osCode;
+ if(Number.isInteger(value.exitCode)&&value.exitCode>=-2147483648&&value.exitCode<=4294967295)out.exitCode=value.exitCode;
+ if(['SIGTERM','SIGKILL','SIGABRT','SIGSEGV','SIGINT'].includes(value.signal))out.signal=value.signal;
+ return Object.freeze(out);
+}
 class SourceFailure extends Error{
- constructor(code,stage,attempt=0){
+ constructor(code,stage,attempt=0,diagnostic){
   if(!Object.hasOwn(RULES,code))code='UNCLASSIFIED_READ_ERROR';
   const rule=RULES[code];super(rule[2]);this.name='SourceFailure';
-  Object.defineProperties(this,{code:{value:code,enumerable:true},stage:{value:STAGES.has(stage)?stage:rule[0],enumerable:true},retryable:{value:rule[1],enumerable:true},attempt:{value:Number.isInteger(attempt)&&attempt>=0&&attempt<=3?attempt:0,enumerable:true}});
+  Object.defineProperties(this,{code:{value:code,enumerable:true},stage:{value:STAGES.has(stage)?stage:rule[0],enumerable:true},retryable:{value:rule[1],enumerable:true},attempt:{value:Number.isInteger(attempt)&&attempt>=0&&attempt<=3?attempt:0,enumerable:true},diagnostic:{value:safeDiagnostic(diagnostic),enumerable:true}});
  }
 }
 function failureFrom(error,fallback='UNCLASSIFIED_READ_ERROR',stage,attempt){
- return error instanceof SourceFailure?new SourceFailure(error.code,error.stage,attempt??error.attempt):new SourceFailure(fallback,stage,attempt);
+ return error instanceof SourceFailure?new SourceFailure(error.code,error.stage,attempt??error.attempt,error.diagnostic):new SourceFailure(fallback,stage,attempt);
 }
-module.exports={SourceFailure,failureFrom};
+module.exports={SourceFailure,failureFrom,safeDiagnostic};
